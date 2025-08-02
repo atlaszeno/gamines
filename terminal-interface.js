@@ -152,3 +152,32 @@ class TerminalInterface {
 }
 
 module.exports = { TerminalInterface };
+const readline = require('readline');
+
+class TerminalInterface {
+  constructor() {
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    this.activeCallId = null;
+  }
+
+  setActiveCallId(callId) {
+    this.activeCallId = callId;
+  }
+
+  promptForDTMFDigit1(callId) {
+    console.log(`\n🎯 Call ${callId}: Caller should press 1 to continue...`);
+  }
+
+  promptForDTMFCode(callId) {
+    console.log(`\n🔢 Call ${callId}: Waiting for 6-digit code...`);
+  }
+
+  close() {
+    this.rl.close();
+  }
+}
+
+module.exports = { TerminalInterface };

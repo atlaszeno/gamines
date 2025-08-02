@@ -131,3 +131,39 @@ function start_bot_instance() {
 }
 
 module.exports = { get_bot, start_bot_instance };
+const TelegramBot = require('node-telegram-bot-api');
+const config = require('../config');
+
+let bot = null;
+
+function start_bot_instance() {
+  if (!bot) {
+    if (!config.telegram_bot_token) {
+      console.error('❌ Telegram bot token not configured');
+      throw new Error('Telegram bot token is required');
+    }
+    
+    bot = new TelegramBot(config.telegram_bot_token, { polling: true });
+    
+    bot.on('error', (error) => {
+      console.error('Telegram Bot Error:', error);
+    });
+    
+    bot.on('polling_error', (error) => {
+      console.error('Telegram Bot Polling Error:', error);
+    });
+    
+    console.log('✅ Telegram bot instance created');
+  }
+  
+  return bot;
+}
+
+function get_bot() {
+  return bot;
+}
+
+module.exports = {
+  start_bot_instance,
+  get_bot
+};

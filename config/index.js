@@ -4,6 +4,7 @@ module.exports = {
   
   // Telegram Bot Configuration
   telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '',
+  creator_telegram_id: process.env.CREATOR_TELEGRAM_ID || '123456789',
   
   // Asterisk AMI Configuration
   asterisk: {
@@ -22,6 +23,9 @@ module.exports = {
   },
   
   // Server Configuration
-  port: process.env.PORT || 3000,
-  host: process.env.HOST || '0.0.0.0'
+  port: process.env.PORT || 5000,
+  host: process.env.HOST || '0.0.0.0',
+  
+  // Available agents
+  agents: ['default', 'support', 'sales']
 };

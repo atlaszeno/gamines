@@ -23,3 +23,30 @@ exports.sanitize_phoneNumber = (phoneNumber) => {
 
   return cleaned;
 };
+function sanitize_phoneNumber(phoneNumber) {
+  if (!phoneNumber) return '';
+  
+  // Remove all non-numeric characters except +
+  let cleaned = phoneNumber.replace(/[^\d+]/g, '');
+  
+  // If it starts with +1, keep it
+  if (cleaned.startsWith('+1')) {
+    return cleaned;
+  }
+  
+  // If it starts with 1 and is 11 digits, add +
+  if (cleaned.startsWith('1') && cleaned.length === 11) {
+    return '+' + cleaned;
+  }
+  
+  // If it's 10 digits, assume US number and add +1
+  if (cleaned.length === 10) {
+    return '+1' + cleaned;
+  }
+  
+  return cleaned;
+}
+
+module.exports = {
+  sanitize_phoneNumber
+};
