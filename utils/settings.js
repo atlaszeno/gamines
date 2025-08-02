@@ -1,13 +1,4 @@
-let settings = {};
 
-exports.set_settings = (newSettings) => {
-  settings = { ...settings, ...newSettings };
-  return settings;
-};
-
-exports.get_settings = () => {
-  return settings;
-};
 let settings = {
   agent: 'default',
   notifications_chat_id: null
