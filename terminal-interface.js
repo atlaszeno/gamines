@@ -58,7 +58,7 @@ class TerminalInterface {
       }, {
         headers: { 'Content-Type': 'application/json' }
       });
-      
+
       if (response.data.success) {
         console.log('✅ DTMF digit "1" sent successfully');
         return true;
@@ -81,7 +81,7 @@ class TerminalInterface {
       }, {
         headers: { 'Content-Type': 'application/json' }
       });
-      
+
       if (response.data.success) {
         console.log(`✅ DTMF code "${code}" sent successfully`);
         return true;
@@ -99,9 +99,9 @@ class TerminalInterface {
   async promptForDTMFDigit1(callId) {
     console.log('\n🔔 Call answered by human - ready to send DTMF');
     console.log(`📞 Call ID: ${callId}`);
-    
+
     const shouldSend = await this.askYesNo('Send DTMF digit "1" to proceed?');
-    
+
     if (shouldSend) {
       const success = await this.sendDTMFDigit1(callId);
       if (success) {
@@ -116,9 +116,9 @@ class TerminalInterface {
   async promptForDTMFCode(callId) {
     console.log('\n🔔 Telegram user selected an option - ready to send DTMF code');
     console.log(`📞 Call ID: ${callId}`);
-    
+
     const shouldSend = await this.askYesNo('Send a 6-digit DTMF code?');
-    
+
     if (shouldSend) {
       const code = await this.askForCode();
       const success = await this.sendDTMFCode(callId, code);
@@ -148,35 +148,6 @@ class TerminalInterface {
     console.log('- When Telegram user selects option: You\'ll be prompted to send 6-digit code');
     console.log('- Answer with y/n or yes/no for prompts');
     console.log('- Enter exactly 6 digits when prompted for DTMF code\n');
-  }
-}
-
-module.exports = { TerminalInterface };
-const readline = require('readline');
-
-class TerminalInterface {
-  constructor() {
-    this.rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    this.activeCallId = null;
-  }
-
-  setActiveCallId(callId) {
-    this.activeCallId = callId;
-  }
-
-  promptForDTMFDigit1(callId) {
-    console.log(`\n🎯 Call ${callId}: Caller should press 1 to continue...`);
-  }
-
-  promptForDTMFCode(callId) {
-    console.log(`\n🔢 Call ${callId}: Waiting for 6-digit code...`);
-  }
-
-  close() {
-    this.rl.close();
   }
 }
 
