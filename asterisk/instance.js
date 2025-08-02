@@ -6,6 +6,7 @@ const config = require('../config');
 let ami = null;
 let connected = false;
 const dtmfEventEmitter = new EventEmitter();
+const activeCalls = new Map();
 
 // Initialize AMI connection
 async function initializeAMI() {
@@ -87,8 +88,9 @@ function handleAMIEvent(event) {
     case 'Hangup':
       const callId = extractCallId(event.channel);
       if (callId) {
-        console.log(`📴 Call ended: ${callId}`);
-        dtmfEventEmitter.emit('callEnded', callId, event);
+        console.log(`📞 Call ended: ${callId}`);
+        dtmfEventEmitter.emit('callEnded', callId, activeCalls.get(callId));
+        activeCalls.delete(callId);
       }
       break;
   }
@@ -118,10 +120,35 @@ async function waitForConnection(timeout = 10000) {
   });
 }
 
+function getCallById(callId) {
+  return activeCalls.get(callId);
+}
+
+function setCallAwaitingDTMF(callId, awaiting = true) {
+  const callData = activeCalls.get(callId);
+  if (callData) {
+    callData.awaitingDTMF = awaiting;
+    if (awaiting) {
+      callData.dtmfCode = '';
+    }
+    activeCalls.set(callId, callData);
+  }
+}
+
+function isConnected() {
+  return connected;
+}
+
+// Initialize AMI when this module is loaded
+initializeAMI().catch(console.error);
+
 module.exports = {
   initializeAMI,
   waitForConnection,
   dtmfEventEmitter,
   getAMI: () => ami,
-  isConnected: () => connected
+  ami: ami,
+  isConnected,
+  getCallById,
+  setCallAwaitingDTMF
 };

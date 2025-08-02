@@ -21,25 +21,36 @@ class InteractiveCallManager extends EventEmitter {
   async setupAMI() {
     try {
       // Use the shared AMI instance from asterisk/instance.js
-      const { ami: sharedAmi } = require('./asterisk/instance');
-      this.ami = sharedAmi;
+      const { getAMI } = require('./asterisk/instance');
+      this.ami = getAMI();
 
-      // Check if the shared AMI is already connected
-      if (this.ami.connected) {
+      // Check if AMI is initialized and connected
+      if (this.ami && this.ami.connected) {
         console.log('Using existing AMI connection');
         this.connected = true;
       } else {
         console.log('Waiting for shared AMI connection...');
-        // Wait for the shared AMI to connect
-        this.ami.on('connect', () => {
-          console.log('Shared AMI connected for InteractiveCallManager');
-          this.connected = true;
-        });
+        
+        // Wait for AMI to be initialized
+        const checkAMI = () => {
+          this.ami = getAMI();
+          if (this.ami) {
+            this.ami.on('connect', () => {
+              console.log('Shared AMI connected for InteractiveCallManager');
+              this.connected = true;
+            });
 
-        this.ami.on('disconnect', () => {
-          console.log('Shared AMI disconnected');
-          this.connected = false;
-        });
+            this.ami.on('disconnect', () => {
+              console.log('Shared AMI disconnected');
+              this.connected = false;
+            });
+          } else {
+            // Retry after a short delay if AMI is not yet initialized
+            setTimeout(checkAMI, 1000);
+          }
+        };
+        
+        checkAMI();
       }
 
     } catch (error) {
