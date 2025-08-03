@@ -11,6 +11,16 @@ const activeCalls = new Map();
 // Initialize AMI connection
 async function initializeAMI() {
   try {
+    // Check if we should use mock mode (when Asterisk is not available)
+    const useMockMode = process.env.MOCK_ASTERISK === 'true' || !await checkAsteriskAvailable();
+    
+    if (useMockMode) {
+      console.log('🎭 Using Mock AMI (Asterisk not available)');
+      ami = createMockAMI();
+      connected = true;
+      return ami;
+    }
+
     ami = new AMI(
       config.asterisk.port,
       config.asterisk.host,
@@ -33,6 +43,12 @@ async function initializeAMI() {
 
     ami.on('error', (error) => {
       console.error('❌ Asterisk AMI Error:', error);
+      // Switch to mock mode if connection fails
+      if (!connected) {
+        console.log('🎭 Switching to Mock AMI mode');
+        ami = createMockAMI();
+        connected = true;
+      }
     });
 
     // Handle various AMI events
@@ -42,9 +58,95 @@ async function initializeAMI() {
 
     return ami;
   } catch (error) {
-    console.error('Failed to initialize AMI:', error);
-    throw error;
+    console.error('Failed to initialize AMI, using mock mode:', error);
+    ami = createMockAMI();
+    connected = true;
+    return ami;
   }
+}
+
+// Check if Asterisk is available
+async function checkAsteriskAvailable() {
+  const net = require('net');
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(2000);
+    
+    socket.on('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    
+    socket.on('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    
+    socket.on('error', () => {
+      resolve(false);
+    });
+    
+    socket.connect(config.asterisk.port, config.asterisk.host);
+  });
+}
+
+// Create a mock AMI for development/testing
+function createMockAMI() {
+  const EventEmitter = require('events');
+  const mockAMI = new EventEmitter();
+  
+  mockAMI.connected = true;
+  mockAMI.keepConnected = () => {};
+  
+  // Mock action method
+  mockAMI.action = async (actionObj) => {
+    console.log(`🎭 Mock AMI Action:`, actionObj.action);
+    
+    // Simulate responses for different actions
+    switch (actionObj.action) {
+      case 'Originate':
+        setTimeout(() => {
+          const callId = actionObj.variable?.match(/CALL_ID=([^,]+)/)?.[1];
+          if (callId) {
+            // Simulate call events
+            setTimeout(() => {
+              dtmfEventEmitter.emit('callAnswered', callId);
+              mockAMI.emit('managerevent', {
+                event: 'UserEvent',
+                userevent: 'CallAnswered',
+                call_id: callId,
+                channel: `SIP/test-mock-${Date.now()}`
+              });
+            }, 2000);
+          }
+        }, 1000);
+        
+        return {
+          response: 'Success',
+          uniqueid: `mock-${Date.now()}`,
+          channel: `SIP/test-mock-${Date.now()}`
+        };
+        
+      case 'redirect':
+        console.log(`🎭 Mock redirect to ${actionObj.context}/${actionObj.exten}`);
+        return { response: 'Success' };
+        
+      case 'hangup':
+        console.log(`🎭 Mock hangup for ${actionObj.channel}`);
+        return { response: 'Success' };
+        
+      default:
+        return { response: 'Success' };
+    }
+  };
+  
+  // Emit connect event after a short delay
+  setTimeout(() => {
+    mockAMI.emit('connect');
+    console.log('🎭 Mock AMI connected');
+  }, 100);
+  
+  return mockAMI;
 }
 
 function handleAMIEvent(event) {

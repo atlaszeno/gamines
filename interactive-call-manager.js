@@ -338,8 +338,17 @@ class InteractiveCallManager extends EventEmitter {
           this.channelCallIdMap.set(response.uniqueid, callId);
         }
       } else {
-        // Simulation mode for testing when not connected to Asterisk
-        console.log('Asterisk not connected - using simulation mode');
+        // Mock/Simulation mode for testing when not connected to real Asterisk
+        console.log('🎭 Using mock mode - simulating call flow');
+
+        // Store a mock channel for this call
+        const mockChannel = `SIP/mock-${Date.now()}`;
+        const callData = this.activeCalls.get(callId);
+        if (callData) {
+          callData.channel = mockChannel;
+          this.activeCalls.set(callId, callData);
+          this.channelCallIdMap.set(mockChannel, callId);
+        }
 
         // Simulate call progression with delays
         setTimeout(() => {
@@ -351,6 +360,11 @@ class InteractiveCallManager extends EventEmitter {
           this.updateCallProgress(callId, 'Human detected - playing intro');
           this.emit('humanDetected', callId);
         }, 4000);
+
+        // Simulate showing menu after intro
+        setTimeout(() => {
+          this.updateCallProgress(callId, 'Playing interactive menu - waiting for DTMF');
+        }, 6000);
       }
 
       this.updateCallProgress(callId, `Call originated to ${cleanPhone} - dialing`);

@@ -27,5 +27,8 @@ module.exports = {
   host: process.env.HOST || '0.0.0.0',
   
   // Available agents
-  agents: ['default', 'support', 'sales']
+  agents: ['default', 'support', 'sales'],
+  
+  // Development settings
+  mock_asterisk: process.env.MOCK_ASTERISK !== 'false' // Default to true unless explicitly disabled
 };
