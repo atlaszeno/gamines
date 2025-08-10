@@ -428,15 +428,19 @@ async function main() {
   try {
     await mongoose.connect(config.mongodb_uri);
     console.log("Database connection established");
-    
-    // Initialize call manager after database connection
+  } catch (err) {
+    console.warn("Database connection failed, continuing without MongoDB:", err.message);
+  }
+  
+  try {
+    // Initialize call manager (works with or without database)
     await callManager.initialize();
     console.log("Interactive call manager initialized");
     
     // Initialize bot after call manager is ready
     initializeBot();
   } catch (err) {
-    console.error("Database connection error:", err);
+    console.error("Failed to initialize application:", err);
     process.exit(1);
   }
 }
