@@ -1,4 +1,3 @@
-
 const AMI = require('asterisk-manager');
 const EventEmitter = require('events');
 const config = require('../config');
@@ -49,7 +48,7 @@ async function initializeAMI() {
 
 function handleAMIEvent(event) {
   const eventName = event.event;
-  
+
   switch (eventName) {
     case 'Newstate':
       if (event.channelstate === '6' && event.channelstatedesc === 'Up') {
@@ -60,7 +59,7 @@ function handleAMIEvent(event) {
         }
       }
       break;
-      
+
     case 'UserEvent':
       if (event.userevent === 'CallAnswered') {
         const callId = event.call_id || extractCallId(event.channel);
@@ -84,7 +83,7 @@ function handleAMIEvent(event) {
         }
       }
       break;
-      
+
     case 'Hangup':
       const callId = extractCallId(event.channel);
       if (callId) {
@@ -140,7 +139,12 @@ function isConnected() {
 }
 
 // Initialize AMI when this module is loaded
-initializeAMI().catch(console.error);
+const config = require('../config');
+if (!config.development_mode) {
+  initializeAMI().catch(console.error);
+} else {
+  console.log('ℹ️ Development mode - skipping local Asterisk AMI connection');
+}
 
 module.exports = {
   initializeAMI,

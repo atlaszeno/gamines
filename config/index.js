@@ -38,5 +38,8 @@ module.exports = {
   host: process.env.HOST || '0.0.0.0',
 
   // Available agents
-  agents: ['default', 'support', 'sales']
+  agents: ['default', 'support', 'sales'],
+  
+  // Development mode - skip local Asterisk AMI
+  development_mode: process.env.NODE_ENV !== 'production'
 };
