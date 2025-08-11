@@ -87,6 +87,12 @@ async function start_bot_instance() {
     throw new Error('Telegram bot token is required');
   }
 
+  // Validate token format
+  if (!config.telegram_bot_token.match(/^\d+:[A-Za-z0-9_-]+$/)) {
+    console.error('❌ Invalid Telegram bot token format');
+    throw new Error('Invalid bot token format');
+  }
+
   isStarting = true;
 
   try {
@@ -137,6 +143,14 @@ async function start_bot_instance() {
     // Handle polling errors with better recovery
     bot.on('polling_error', async (error) => {
       console.error('❌ Polling error:', error.message);
+      
+      if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 401) {
+        console.error('❌ Bot token is invalid or expired. Please update TELEGRAM_BOT_TOKEN in secrets.');
+        bot.stopPolling();
+        bot = null;
+        isStarting = false;
+        return;
+      }
       
       if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
         console.log('🔧 Conflict detected - stopping current bot...');
