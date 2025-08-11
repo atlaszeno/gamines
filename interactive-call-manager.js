@@ -7,7 +7,7 @@ const fs = require('fs');
 const { MagnusBillingSIPClient } = require('./magnusbilling-sip-client');
 
 // Import configuration
-const config = require('../config');
+const config = require('./config');
 
 class InteractiveCallManager extends EventEmitter {
   constructor() {

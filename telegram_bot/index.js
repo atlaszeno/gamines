@@ -18,20 +18,17 @@ let bot = null;
 const userSessions = new Map();
 const callIdToChat = new Map(); // Map call IDs to chat IDs
 
-// Helper function to get the shared call manager
+// Export function to set call manager from app.js
+function setCallManager(manager) {
+  callManager = manager;
+  if (callManager && bot) {
+    setupCallManagerEvents();
+  }
+}
+
 function getCallManager() {
   if (!callManager) {
-    // Try to get the call manager from the Express app locals
-    try {
-      const app = require('../app');
-      callManager = app.locals.callManager;
-      if (callManager) {
-        setupCallManagerEvents();
-      }
-    } catch (error) {
-      console.error('Error getting shared call manager:', error);
-      throw new Error('Call manager not available');
-    }
+    throw new Error('Call manager not initialized. Make sure app.js has called setCallManager.');
   }
   return callManager;
 }
@@ -791,4 +788,4 @@ const initializeBot = async () => {
   });
 };
 
-module.exports = { initializeBot };
+module.exports = { initializeBot, setCallManager };

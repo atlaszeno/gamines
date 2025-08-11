@@ -433,11 +433,14 @@ async function main() {
     console.log("Interactive call manager initialized");
     
     // Initialize bot after call manager is ready
+    const { setCallManager } = require('./telegram_bot');
+    setCallManager(callManager);
     await initializeBot();
   } catch (err) {
     console.error("Application initialization error:", err);
-    // Don't exit, continue without some features
+    // Don't exit, continue with basic functionality
     console.log("⚠️ Continuing with limited functionality...");
+    // Ensure the server still starts even if some features fail
   }
 }
 
