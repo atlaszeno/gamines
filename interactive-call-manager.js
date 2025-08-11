@@ -1,4 +1,3 @@
-
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
 const path = require('path');
@@ -6,6 +5,9 @@ const fs = require('fs');
 
 // Import the MagnusBilling SIP client
 const { MagnusBillingSIPClient } = require('./magnusbilling-sip-client');
+
+// Import configuration
+const config = require('../config');
 
 class InteractiveCallManager extends EventEmitter {
   constructor() {
@@ -87,6 +89,7 @@ class InteractiveCallManager extends EventEmitter {
       }
 
       console.log(`📞 Initiating call to ${phoneNumber} (${name}) via MagnusBilling`);
+      console.log(`📱 Using Caller ID: ${config.sip.caller_id}`);
 
       // Make call through SIP client
       const callResult = await this.sipClient.makeCall(phoneNumber);

@@ -2,7 +2,7 @@ module.exports = {
   mongodb_uri: process.env.MONGODB_URI || process.env.REPLIT_DB_URL || 'mongodb://localhost:27017/otpbot',
 
   // Telegram Bot Configuration
-  telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '8431827604:AAHBRy1EvVatMibGly43IB0gR2F-Md2MlvE',
+  telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN,
   creator_telegram_id: process.env.CREATOR_TELEGRAM_ID || '8171834446',
 
   // Asterisk AMI Configuration (This is for your Asterisk server, not MagnusBilling's AMI)
