@@ -465,8 +465,17 @@ const server = app.listen(port, '0.0.0.0', () => {
 });
 
 // Graceful shutdown handling
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('🛑 SIGTERM received, shutting down gracefully...');
+  
+  // Clean up bot first
+  try {
+    const { cleanupBot } = require('./telegram_bot/botInstance');
+    await cleanupBot();
+  } catch (error) {
+    console.error('Error cleaning up bot:', error.message);
+  }
+  
   server.close(() => {
     console.log('✅ Server closed');
     process.exit(0);
