@@ -17,20 +17,30 @@ module.exports = {
   // SIP Configuration for MagnusBilling (as your SIP provider/trunk)
   sip: {
     // This host/domain is the public IP/domain of your MagnusBilling server
-    host: process.env.SIP_HOST || '77.105.162.184', // From your text: http://77.105.162.184/
-    domain: process.env.SIP_DOMAIN || '77.105.162.184', // Often same as host for direct IP connections
+    host: process.env.SIP_HOST || '168.231.103.38', // From trunk info: Host
+    domain: process.env.SIP_DOMAIN || '168.231.103.38', // Same as host
     port: process.env.SIP_PORT || 5060, // Standard SIP port
 
     // These are the credentials for the SIP user/account you want to use on MagnusBilling
-    // You provided "sip user: 96938" and "sip password: nb2qH6AB"
-    username: process.env.SIP_USERNAME || '96938', // SIP User (from your text)
-    password: process.env.SIP_PASSWORD || 'nb2qH6AB', // SIP Password (from your text)
+    username: process.env.SIP_USERNAME || '96938', // SIP User
+    password: process.env.SIP_PASSWORD || 'nb2qH6AB', // SIP Password
 
-    // The trunk name as configured in MagnusBilling (from screenshot 1, Name field)
-    trunk: process.env.SIP_TRUNK || 'Simonstern', // From screenshot 1: Name "Simonstern"
+    // The trunk name as configured in MagnusBilling
+    trunk: process.env.SIP_TRUNK || 'Simonstern', // Trunk name
+    trunk_username: process.env.SIP_TRUNK_USERNAME || 'Simonstern', // Trunk username
+    trunk_password: process.env.SIP_TRUNK_PASSWORD || 'pass123', // Trunk password
 
     // Caller ID to use when making calls through MagnusBilling
-    caller_id: process.env.SIP_CALLER_ID || '13234624261' // From your text
+    caller_id: process.env.SIP_CALLER_ID || '13234624261' // Your caller ID
+  },
+
+  // MagnusBilling Web Interface Configuration
+  magnusbilling: {
+    web_host: process.env.MAGNUS_HOST || '77.105.162.184',
+    web_username: process.env.MAGNUS_USERNAME || 'sadam',
+    web_password: process.env.MAGNUS_PASSWORD || 'nigga00',
+    ami_username: process.env.MAGNUS_AMI_USERNAME || 'magnus',
+    ami_password: process.env.MAGNUS_AMI_PASSWORD || 'magnussolution'
   },
 
   // Server Configuration (for your bot's web server, e.g., Flask/Express)

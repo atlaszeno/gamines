@@ -14,7 +14,7 @@ deploymentTarget = "autoscale"
 ignorePorts = false
 
 [workflows]
-runButton = "Start MagnusBilling Bot"
+runButton = "Start Bot (Fixed)"
 
 [[workflows.workflow]]
 name = "Start Application"
@@ -27,6 +27,15 @@ args = "node app.js"
 
 [[workflows.workflow]]
 name = "Start MagnusBilling Bot"
+author = 45833391
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node app.js"
+
+[[workflows.workflow]]
+name = "Start Bot (Fixed)"
 author = 45833391
 mode = "sequential"
 

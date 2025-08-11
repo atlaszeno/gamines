@@ -12,12 +12,16 @@ class MagnusBillingSIPClient extends EventEmitter {
   async initialize() {
     try {
       console.log('🚀 Initializing MagnusBilling SIP client (Mock Mode)');
+      console.log(`📡 Connecting to MagnusBilling server: ${config.sip.host}:${config.sip.port}`);
+      console.log(`👤 Using SIP credentials: ${config.sip.username}`);
+      console.log(`🏷️  Using Caller ID: ${config.sip.caller_id}`);
 
       // Simulate connection delay
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       this.isConnected = true;
       console.log('✅ Connected to MagnusBilling SIP server (Mock)');
+      console.log(`✅ Trunk configured: ${config.sip.trunk} (${config.sip.trunk_username})`);
       this.emit('connected');
 
       return true;
