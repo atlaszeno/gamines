@@ -54,3 +54,92 @@ exports.set_unprocessed_data = (data) => {
 exports.pop_unprocessed_line = () => {
   return unprocessedData.pop();
 };
+const fs = require('fs');
+const path = require('path');
+
+class EntriesManager {
+  constructor() {
+    this.entriesFile = path.join(__dirname, '../data/entries.json');
+    this.ensureDataDir();
+  }
+
+  ensureDataDir() {
+    const dataDir = path.dirname(this.entriesFile);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    if (!fs.existsSync(this.entriesFile)) {
+      fs.writeFileSync(this.entriesFile, JSON.stringify([], null, 2));
+    }
+  }
+
+  getEntries() {
+    try {
+      const data = fs.readFileSync(this.entriesFile, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('Error reading entries:', error);
+      return [];
+    }
+  }
+
+  addEntry(entry) {
+    try {
+      const entries = this.getEntries();
+      const newEntry = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        ...entry
+      };
+      entries.push(newEntry);
+      fs.writeFileSync(this.entriesFile, JSON.stringify(entries, null, 2));
+      return newEntry;
+    } catch (error) {
+      console.error('Error adding entry:', error);
+      throw error;
+    }
+  }
+
+  updateEntry(id, updates) {
+    try {
+      const entries = this.getEntries();
+      const index = entries.findIndex(entry => entry.id === id);
+      if (index === -1) {
+        throw new Error('Entry not found');
+      }
+      entries[index] = { ...entries[index], ...updates };
+      fs.writeFileSync(this.entriesFile, JSON.stringify(entries, null, 2));
+      return entries[index];
+    } catch (error) {
+      console.error('Error updating entry:', error);
+      throw error;
+    }
+  }
+
+  deleteEntry(id) {
+    try {
+      const entries = this.getEntries();
+      const filteredEntries = entries.filter(entry => entry.id !== id);
+      fs.writeFileSync(this.entriesFile, JSON.stringify(filteredEntries, null, 2));
+      return true;
+    } catch (error) {
+      console.error('Error deleting entry:', error);
+      throw error;
+    }
+  }
+
+  searchEntries(query) {
+    try {
+      const entries = this.getEntries();
+      return entries.filter(entry => 
+        JSON.stringify(entry).toLowerCase().includes(query.toLowerCase())
+      );
+    } catch (error) {
+      console.error('Error searching entries:', error);
+      return [];
+    }
+  }
+}
+
+module.exports = EntriesManager;
