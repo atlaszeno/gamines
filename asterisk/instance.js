@@ -139,7 +139,6 @@ function isConnected() {
 }
 
 // Initialize AMI when this module is loaded
-const config = require('../config');
 if (!config.development_mode) {
   initializeAMI().catch(console.error);
 } else {
