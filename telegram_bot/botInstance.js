@@ -1,7 +1,9 @@
+
 const TelegramBot = require("node-telegram-bot-api");
 const config = require("../config");
 
-let bot;
+let bot = null;
+let isStarting = false;
 const messageQueue = [];
 let isProcessingQueue = false;
 
@@ -27,12 +29,12 @@ async function processMessageQueue() {
       } else {
         result = await bot[method](...args);
       }
-      console.log('Message sent successfully:', method);
+      console.log('✅ Message sent successfully:', method);
       resolve(result);
     } catch (error) {
       if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 429) {
         const retryAfter = error.response.body?.parameters?.retry_after || 4;
-        console.log(`Rate limited. Retrying after ${retryAfter} seconds...`);
+        console.log(`⏳ Rate limited. Retrying after ${retryAfter} seconds...`);
 
         // Put the message back at the front of the queue
         messageQueue.unshift({ method, args, resolve, reject });
@@ -41,10 +43,10 @@ async function processMessageQueue() {
         await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
         continue;
       } else if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 403) {
-        console.error('Bot was kicked from chat or forbidden:', error.message);
+        console.error('❌ Bot was kicked from chat or forbidden:', error.message);
         reject(error);
       } else {
-        console.error('Telegram error:', error.message);
+        console.error('❌ Telegram error:', error.message);
         reject(error);
       }
     }
@@ -65,6 +67,16 @@ function queueBotMethod(method, ...args) {
 }
 
 async function start_bot_instance() {
+  // Prevent multiple simultaneous starts
+  if (isStarting) {
+    console.log('⏳ Bot is already starting, waiting...');
+    // Wait for the current startup to complete
+    while (isStarting) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    return bot;
+  }
+
   if (bot) {
     console.log('✅ Bot instance already exists, returning existing instance');
     return bot;
@@ -75,132 +87,122 @@ async function start_bot_instance() {
     throw new Error('Telegram bot token is required');
   }
 
-  console.log('Starting Telegram bot with token:', config.telegram_bot_token.substring(0, 20) + '...');
+  isStarting = true;
 
   try {
+    console.log('🚀 Starting Telegram bot with token:', config.telegram_bot_token.substring(0, 20) + '...');
+
     // Create bot instance without polling first
     bot = new TelegramBot(config.telegram_bot_token, { polling: false });
 
-    // Check for existing webhooks and remove them
+    // Clear any existing webhooks first
     try {
-      const webhookInfo = await bot.getWebhookInfo();
-      if (webhookInfo.url) {
-        console.log('🔧 Removing existing webhook...');
-        await bot.deleteWebhook();
-        // Wait a bit after webhook deletion
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+      console.log('🔧 Clearing any existing webhooks...');
+      await bot.deleteWebhook({ drop_pending_updates: true });
+      console.log('✅ Webhooks cleared');
+      
+      // Wait a moment to ensure webhook is fully cleared
+      await new Promise(resolve => setTimeout(resolve, 2000));
     } catch (error) {
-      console.log('⚠️ Could not check/remove webhook:', error.message);
+      console.log('⚠️ Could not clear webhook:', error.message);
     }
 
-    // Start polling with conflict resolution
-    await bot.startPolling({
-      interval: 1000,
-      params: {
-        timeout: 10
-      }
-    });
-
-    console.log('Bot instance created, starting polling...');
-
-    // Store original methods
+    // Store original methods for rate limiting
     const originalSendMessage = bot.sendMessage.bind(bot);
     const originalAnswerCallbackQuery = bot.answerCallbackQuery.bind(bot);
 
-    // Store original methods for queue processing
     bot._originalSendMessage = originalSendMessage;
     bot._originalAnswerCallbackQuery = originalAnswerCallbackQuery;
 
-    // Override sendMessage to use rate limiting
+    // Override methods to use rate limiting
     bot.sendMessage = (chatId, text, options = {}) => {
-      console.log('Sending message to', chatId, ':', text.substring(0, 50));
+      console.log('📤 Sending message to', chatId, ':', text.substring(0, 50));
       return queueBotMethod('sendMessage', chatId, text, options);
     };
 
-    // Override answerCallbackQuery to use rate limiting
     bot.answerCallbackQuery = (callbackQueryId, options = {}) => {
       return queueBotMethod('answerCallbackQuery', callbackQueryId, options);
     };
 
-    // Handle polling errors
-    bot.on('polling_error', (error) => {
-      console.error('Polling error:', error.message);
+    // Start polling with proper error handling
+    console.log('🔄 Starting bot polling...');
+    bot.startPolling({
+      interval: 1000,
+      params: {
+        timeout: 10,
+        allowed_updates: ['message', 'callback_query']
+      }
+    });
+
+    // Handle polling errors with better recovery
+    bot.on('polling_error', async (error) => {
+      console.error('❌ Polling error:', error.message);
+      
       if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
-        console.log('Conflict error - another instance might be running');
+        console.log('🔧 Conflict detected - stopping current bot...');
         
-        // Stop current polling and wait before restarting
-        setTimeout(async () => {
+        try {
+          // Stop polling immediately
+          bot.stopPolling();
+          console.log('⏹️ Polling stopped');
+          
+          // Wait longer before attempting restart
+          await new Promise(resolve => setTimeout(resolve, 10000));
+          
+          // Clear webhooks again
           try {
-            console.log('🔄 Attempting to resolve bot conflict...');
-            
-            // Stop polling first
-            if (bot.isPolling()) {
-              bot.stopPolling();
-              console.log('⏹️ Stopped existing polling');
-            }
-            
-            // Clear any existing webhooks
-            try {
-              await bot.deleteWebhook();
-              console.log('🗑️ Cleared webhooks');
-            } catch (webhookError) {
-              console.log('⚠️ Could not clear webhook:', webhookError.message);
-            }
-            
-            // Wait before restarting
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Restart polling
-            await bot.startPolling({
-              interval: 1000,
-              params: { timeout: 10 }
-            });
-            console.log('✅ Successfully restarted bot polling');
-          } catch (restartError) {
-            console.error('❌ Failed to restart polling:', restartError.message);
+            await bot.deleteWebhook({ drop_pending_updates: true });
+            console.log('🗑️ Webhooks cleared after conflict');
+          } catch (webhookError) {
+            console.log('⚠️ Could not clear webhook after conflict:', webhookError.message);
           }
-        }, 5000);
+          
+          // Wait before restarting
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // Restart polling
+          console.log('🔄 Restarting bot polling after conflict...');
+          bot.startPolling({
+            interval: 1000,
+            params: {
+              timeout: 10,
+              allowed_updates: ['message', 'callback_query']
+            }
+          });
+          
+          console.log('✅ Bot polling restarted successfully');
+        } catch (restartError) {
+          console.error('❌ Failed to restart bot after conflict:', restartError.message);
+          // Reset bot instance on failure
+          bot = null;
+          isStarting = false;
+        }
       }
     });
 
     // Test bot connection
-    bot.getMe().then(info => {
-      console.log('Bot connected successfully:', info.username);
-    }).catch(error => {
-      console.error('Failed to connect bot:', error.message);
-    });
+    try {
+      const botInfo = await bot.getMe();
+      console.log('✅ Bot connected successfully:', botInfo.username);
+      console.log('🆔 Bot ID:', botInfo.id);
+    } catch (error) {
+      console.error('❌ Failed to get bot info:', error.message);
+      throw error;
+    }
 
     // Handle webhook errors
     bot.on('webhook_error', (error) => {
-      console.error('Webhook error:', error.message);
+      console.error('⚠️ Webhook error:', error.message);
     });
 
-    // Add error handling for unhandled promise rejections
-    process.on('unhandledRejection', (reason, promise) => {
-      if (reason && reason.code === 'ETELEGRAM') {
-        console.error('Unhandled Telegram error:', reason.message);
-        return;
-      }
-      console.error('Unhandled promise rejection:', reason);
-    });
-
-    // Add cleanup handlers
-    process.on('SIGTERM', async () => {
-      console.log('🛑 Received SIGTERM, cleaning up bot...');
-      await cleanupBot();
-    });
-
-    process.on('SIGINT', async () => {
-      console.log('🛑 Received SIGINT, cleaning up bot...');
-      await cleanupBot();
-    });
-
-    console.log('✅ Telegram bot instance created');
+    console.log('✅ Telegram bot instance created and configured');
+    
   } catch (error) {
     console.error('❌ Failed to start bot instance:', error.message);
     bot = null;
     throw error;
+  } finally {
+    isStarting = false;
   }
 
   return bot;
@@ -210,16 +212,18 @@ async function start_bot_instance() {
 async function cleanupBot() {
   if (bot) {
     try {
+      console.log('🧹 Cleaning up bot...');
+      
       if (bot.isPolling()) {
         bot.stopPolling();
         console.log('⏹️ Bot polling stopped');
       }
       
       try {
-        await bot.deleteWebhook();
-        console.log('🗑️ Webhook deleted');
+        await bot.deleteWebhook({ drop_pending_updates: true });
+        console.log('🗑️ Webhook deleted and pending updates dropped');
       } catch (error) {
-        console.log('⚠️ Could not delete webhook:', error.message);
+        console.log('⚠️ Could not delete webhook during cleanup:', error.message);
       }
       
       bot = null;
@@ -229,6 +233,26 @@ async function cleanupBot() {
     }
   }
 }
+
+// Add process handlers for proper cleanup
+process.on('SIGTERM', async () => {
+  console.log('🛑 Received SIGTERM, cleaning up bot...');
+  await cleanupBot();
+});
+
+process.on('SIGINT', async () => {
+  console.log('🛑 Received SIGINT, cleaning up bot...');
+  await cleanupBot();
+});
+
+// Handle unhandled rejections
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason && reason.code === 'ETELEGRAM') {
+    console.error('⚠️ Unhandled Telegram error:', reason.message);
+    return;
+  }
+  console.error('⚠️ Unhandled promise rejection:', reason);
+});
 
 module.exports = {
   start_bot_instance,

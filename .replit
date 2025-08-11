@@ -14,7 +14,7 @@ deploymentTarget = "autoscale"
 ignorePorts = false
 
 [workflows]
-runButton = "Start Bot (Fixed)"
+runButton = "Start Clean Bot"
 
 [[workflows.workflow]]
 name = "Start Application"
@@ -36,6 +36,15 @@ args = "node app.js"
 
 [[workflows.workflow]]
 name = "Start Bot (Fixed)"
+author = 45833391
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node app.js"
+
+[[workflows.workflow]]
+name = "Start Clean Bot"
 author = 45833391
 mode = "sequential"
 
