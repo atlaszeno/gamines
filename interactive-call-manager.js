@@ -1,3 +1,4 @@
+
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
 const path = require('path');
@@ -5,171 +6,6 @@ const fs = require('fs');
 
 // Import the MagnusBilling SIP client
 const { MagnusBillingSIPClient } = require('./magnusbilling-sip-client');
-
-class InteractiveCallManager extends EventEmitter {
-  constructor() {
-    super();
-    this.activeCalls = new Map();
-    this.sipClient = new MagnusBillingSIPClient();
-    this.setupSIPEvents();
-  }
-
-  setupSIPEvents() {
-    this.sipClient.on('connected', () => {
-      console.log('✅ SIP client connected to MagnusBilling');
-    });
-
-    this.sipClient.on('callAnswered', (phoneNumber, callId) => {
-      console.log(`📞 Call answered: ${phoneNumber} (${callId})`);
-      this.emit('callAnswered', callId, phoneNumber);
-    });
-
-    this.sipClient.on('callEnded', (phoneNumber, callId) => {
-      console.log(`📴 Call ended: ${phoneNumber} (${callId})`);
-      this.emit('callEnded', callId);
-      this.activeCalls.delete(callId);
-    });
-
-    this.sipClient.on('dtmfSent', (digit, callId) => {
-      console.log(`🔢 DTMF sent: ${digit} for call ${callId}`);
-    });
-  }
-
-  async initialize() {
-    try {
-      await this.sipClient.initialize();
-      console.log('✅ Interactive Call Manager initialized with MagnusBilling');
-    } catch (error) {
-      console.error('❌ Failed to initialize call manager:', error);
-      throw error;
-    }
-  }
-
-  async initiateCall(phoneNumber, name = 'Unknown') {
-    try {
-      console.log(`🎯 Initiating call to ${phoneNumber} (Name: ${name})`);
-      
-      const callResult = await this.sipClient.makeCall(phoneNumber);
-      const callId = callResult.callId;
-      
-      // Store call information
-      this.activeCalls.set(callId, {
-        id: callId,
-        phoneNumber,
-        name,
-        status: 'initiated',
-        startTime: new Date(),
-        events: []
-      });
-
-      this.updateCallStatus(callId, `Call originated to ${phoneNumber} - dialing`);
-      
-      return callId;
-    } catch (error) {
-      console.error('❌ Error initiating call:', error);
-      throw error;
-    }
-  }
-
-  updateCallStatus(callId, message) {
-    const call = this.activeCalls.get(callId);
-    if (call) {
-      call.status = message;
-      call.events.push({
-        timestamp: new Date(),
-        message
-      });
-      console.log(`Update for call ID ${callId}: ${message}`);
-      this.emit('callUpdated', callId, message);
-    }
-  }
-
-  async sendDTMF(callId, digit) {
-    try {
-      await this.sipClient.sendDTMF(digit);
-      console.log(`🔢 Sent DTMF ${digit} for call ${callId}`);
-      return true;
-    } catch (error) {
-      console.error(`❌ Error sending DTMF for call ${callId}:`, error);
-      throw error;
-    }
-  }
-
-  async endCall(callId) {
-    try {
-      await this.sipClient.endCall();
-      this.activeCalls.delete(callId);
-      console.log(`📴 Call ${callId} ended`);
-      return true;
-    } catch (error) {
-      console.error(`❌ Error ending call ${callId}:`, error);
-      throw error;
-    }
-  }
-
-  getCallStatus(callId) {
-    const call = this.activeCalls.get(callId);
-    if (call) {
-      return {
-        ...call,
-        sipStatus: this.sipClient.getCallStatus()
-      };
-    }
-    return null;
-  }
-
-  getActiveCalls() {
-    return Array.from(this.activeCalls.values());
-  }
-
-  async uploadAudioForCall(callId, audioPath) {
-    try {
-      console.log(`🎵 Uploading audio for call ${callId}: ${audioPath}`);
-      // Audio upload logic would go here
-      return true;
-    } catch (error) {
-      console.error(`❌ Error uploading audio for call ${callId}:`, error);
-      throw error;
-    }
-  }
-
-  async handleDTMF(callId, digit) {
-    return await this.sendDTMF(callId, digit);
-  }
-
-  async handleButtonClick(callId, buttonId) {
-    console.log(`🔘 Button ${buttonId} clicked for call ${callId}`);
-    // Handle button logic here
-    return true;
-  }
-
-  async sendManualDTMF(callId, digit) {
-    return await this.sendDTMF(callId, digit);
-  }
-
-  async showDTMFOptions(callId) {
-    console.log(`📋 Showing DTMF options for call ${callId}`);
-    return true;
-  }
-
-  async sendDTMFCode(callId, code) {
-    console.log(`🔢 Sending DTMF code ${code} for call ${callId}`);
-    for (const digit of code) {
-      await this.sendDTMF(callId, digit);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Wait between digits
-    }
-    return true;
-  }
-
-  async setupTTSRecordings(callId, recordings) {
-    const call = this.activeCalls.get(callId);
-    if (call) {
-      call.ttsRecordings = recordings;
-      console.log(`🗣️ TTS recordings setup for call ${callId}`);
-    }
-    return true;
-  }
-}
 
 class InteractiveCallManager extends EventEmitter {
   constructor() {
@@ -218,7 +54,7 @@ class InteractiveCallManager extends EventEmitter {
 
       console.log('✅ SIP connection established');
 
-      this.isInitialized = true;
+      this.initialized = true;
       console.log('✅ Interactive Call Manager initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Interactive Call Manager:', error);
@@ -246,7 +82,7 @@ class InteractiveCallManager extends EventEmitter {
 
   async initiateCall(phoneNumber, name = 'Unknown') {
     try {
-      if (!this.isInitialized) {
+      if (!this.initialized) {
         throw new Error('Call manager not initialized');
       }
 
