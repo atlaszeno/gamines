@@ -274,9 +274,9 @@ async function saveUploadedAudio(fileBuffer, fileName) {
 }
 
 // Initialize Telegram Bot
-const initializeBot = () => {
+const initializeBot = async () => {
   console.log('Initializing Telegram bot...');
-  bot = start_bot_instance(); // Assign to global bot variable
+  bot = await start_bot_instance(); // Assign to global bot variable
   const adminId = config.creator_telegram_id;
   console.log('Bot initialized with admin ID:', adminId);
 
@@ -683,7 +683,7 @@ const initializeBot = () => {
         callIdToChat.set(chatId, chatId); // Map for event handling
         bot.sendMessage(
           chatId,
-          "📞 <b>Call</b>\n\nPlease enter the phone number you want to call:\n\n<i>Example: +1234567890 or 1234567890</i>",
+          "📞 <b>Call</b>\nPlease enter the phone number you want to call:\n\n<i>Example: +1234567890 or 1234567890</i>",
           { parse_mode: "HTML" }
         );
         break;
@@ -695,7 +695,7 @@ const initializeBot = () => {
         } else {
           bot.sendMessage(
             chatId,
-            "🎵 <b>Upload Audio File</b>\n\nPlease upload an audio file (WAV, MP3, etc.) for the current call.",
+            "🎵 <b>Upload Audio File</b>\nPlease upload an audio file (WAV, MP3, etc.) for the current call.",
             { parse_mode: "HTML" }
           );
         }

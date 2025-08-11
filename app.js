@@ -413,7 +413,16 @@ app.post("/api/end-call", async (req, res) => {
   }
 });
 
-app.use("/", indexRouter);
+// Health check endpoint for deployment
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    message: 'Interactive Call Manager is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.use("/api", indexRouter);
 
 async function main() {
   try {
@@ -424,7 +433,7 @@ async function main() {
     console.log("Interactive call manager initialized");
     
     // Initialize bot after call manager is ready
-    initializeBot();
+    await initializeBot();
   } catch (err) {
     console.error("Application initialization error:", err);
     // Don't exit, continue without some features
@@ -446,6 +455,22 @@ app.use(function (err, req, res, next) {
   // render the error page
   res.status(err.status || 500);
   res.render("error");
+});
+
+// Configure server for deployment
+const port = process.env.PORT || 3000;
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${port}`);
+  console.log(`🌐 Health check available at http://localhost:${port}/`);
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
 });
 
 module.exports = app;

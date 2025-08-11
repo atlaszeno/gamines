@@ -64,7 +64,7 @@ function queueBotMethod(method, ...args) {
   });
 }
 
-function start_bot_instance() {
+async function start_bot_instance() {
   if (!bot) {
     if (!config.telegram_bot_token) {
       console.error('❌ Telegram bot token not configured');
@@ -73,13 +73,25 @@ function start_bot_instance() {
 
     console.log('Starting Telegram bot with token:', config.telegram_bot_token.substring(0, 20) + '...');
 
-    bot = new TelegramBot(config.telegram_bot_token, { 
-      polling: {
-        interval: 1000,
-        autoStart: true,
-        params: {
-          timeout: 10
-        }
+    // Create bot instance without polling first
+    bot = new TelegramBot(config.telegram_bot_token, { polling: false });
+
+    try {
+      // Check for existing webhooks and remove them
+      const webhookInfo = await bot.getWebhookInfo();
+      if (webhookInfo.url) {
+        console.log('🔧 Removing existing webhook...');
+        await bot.deleteWebhook();
+      }
+    } catch (error) {
+      console.log('⚠️ Could not check/remove webhook:', error.message);
+    }
+
+    // Now start polling
+    bot.startPolling({
+      interval: 1000,
+      params: {
+        timeout: 10
       }
     });
 
@@ -109,6 +121,17 @@ function start_bot_instance() {
       console.error('Polling error:', error.message);
       if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
         console.log('Conflict error - another instance might be running');
+        // Try to restart polling after a delay
+        setTimeout(async () => {
+          try {
+            bot.stopPolling();
+            await bot.deleteWebhook();
+            bot.startPolling();
+            console.log('🔄 Restarted bot polling');
+          } catch (restartError) {
+            console.error('Failed to restart polling:', restartError.message);
+          }
+        }, 5000);
       }
     });
 
