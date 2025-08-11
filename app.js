@@ -4,7 +4,6 @@ const express = require("express");
 const path = require("path");
 const cookieParser = require("cookie-parser");
 const logger = require("morgan");
-const mongoose = require("mongoose");
 const config = require("./config/index");
 const compression = require("compression");
 const cors = require("cors");
@@ -12,6 +11,7 @@ const helmet = require("helmet");
 const multer = require("multer");
 const fs = require("fs");
 const axios = require("axios");
+const { SimpleDB } = require("./simple-db");
 
 const indexRouter = require("./routes/index");
 const { initializeBot } = require("./telegram_bot");
@@ -19,7 +19,9 @@ const { InteractiveCallManager } = require("./interactive-call-manager");
 const { TerminalInterface } = require("./terminal-interface");
 
 const app = express();
-mongoose.set("strictQuery", true);
+
+// Initialize simple database
+const db = new SimpleDB();
 
 // Initialize interactive call manager
 const callManager = new InteractiveCallManager();
@@ -131,7 +133,7 @@ app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "jade");
 
 // Initialize database connection
-main().catch((err) => console.error("Failed to connect to database:", err));
+main().catch((err) => console.error("Failed to initialize application:", err));
 
 app.use(cors());
 app.use(helmet({ crossOriginResourcePolicy: false }));
@@ -415,18 +417,18 @@ app.use("/", indexRouter);
 
 async function main() {
   try {
-    await mongoose.connect(config.mongodb_uri);
-    console.log("Database connection established");
+    console.log("✅ Simple database initialized");
     
-    // Initialize call manager after database connection
+    // Initialize call manager
     await callManager.initialize();
     console.log("Interactive call manager initialized");
     
     // Initialize bot after call manager is ready
     initializeBot();
   } catch (err) {
-    console.error("Database connection error:", err);
-    process.exit(1);
+    console.error("Application initialization error:", err);
+    // Don't exit, continue without some features
+    console.log("⚠️ Continuing with limited functionality...");
   }
 }
 

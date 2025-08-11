@@ -3,91 +3,114 @@ const EventEmitter = require('events');
 const path = require('path');
 const fs = require('fs');
 
+// Import the MagnusBilling SIP client
+const { MagnusBillingSIPClient } = require('./magnusbilling-sip-client');
+
 class InteractiveCallManager extends EventEmitter {
   constructor() {
     super();
     this.activeCalls = new Map();
     this.initialized = false;
+    this.sipClient = null; // To hold the SIP client instance
   }
 
   async initialize() {
     if (this.initialized) return;
 
-    console.log('🎯 Initializing Interactive Call Manager...');
+    console.log('🚀 Initializing Interactive Call Manager...');
 
-    // Set up event handlers
-    this.on('callAnswered', this.handleCallAnswered.bind(this));
-    this.on('humanDetected', this.handleHumanDetected.bind(this));
-    this.on('showTelegramMenu', this.handleShowTelegramMenu.bind(this));
-    this.on('dtmfCodeReceived', this.handleDTMFCode.bind(this));
-    this.on('callEnded', this.handleCallEnded.bind(this));
+    try {
+      // Initialize MagnusBilling SIP client
+      this.sipClient = new MagnusBillingSIPClient();
+      await this.sipClient.initialize();
 
-    this.initialized = true;
-    console.log('✅ Interactive Call Manager initialized');
+      // Set up SIP client event listeners
+      this.sipClient.on('connected', () => {
+        console.log('✅ SIP client connected to MagnusBilling');
+      });
+
+      this.sipClient.on('callEstablished', (phoneNumber) => {
+        const callId = this.generateCallId();
+        this.activeCalls.set(callId, {
+          phoneNumber,
+          status: 'established',
+          startTime: new Date(),
+          session: this.sipClient.activeSession
+        });
+        this.emit('callEstablished', callId, phoneNumber);
+      });
+
+      this.sipClient.on('callTerminated', (phoneNumber) => {
+        // Find and remove the call from active calls
+        for (const [callId, call] of this.activeCalls.entries()) {
+          if (call.phoneNumber === phoneNumber) {
+            this.activeCalls.delete(callId);
+            this.emit('callTerminated', callId);
+            break;
+          }
+        }
+      });
+
+      console.log('✅ SIP connection established');
+
+      this.isInitialized = true;
+      console.log('✅ Interactive Call Manager initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize Interactive Call Manager:', error);
+      throw error;
+    }
+  }
+
+  generateCallId() {
+    return uuidv4();
+  }
+
+  addCallEvent(callId, type, message) {
+    const callData = this.activeCalls.get(callId);
+    if (callData) {
+      if (!callData.events) callData.events = [];
+      callData.events.push({
+        timestamp: new Date(),
+        type: type,
+        message: message
+      });
+      this.activeCalls.set(callId, callData);
+      this.emit('callUpdated', callId, message);
+    }
   }
 
   async initiateCall(phoneNumber, name = 'Unknown') {
-    const callId = uuidv4();
-    const timestamp = new Date();
-
-    const callData = {
-      id: callId,
-      phoneNumber,
-      name,
-      status: 'dialing',
-      timestamp,
-      events: [],
-      ttsRecordings: {}
-    };
-
-    this.activeCalls.set(callId, callData);
-
-    console.log(`Initiating call to ${phoneNumber} (Name: ${name})`);
-
     try {
-      // Get AMI instance
-      const { getAMI } = require('./asterisk/instance');
-      const ami = getAMI();
-
-      if (!ami) {
-        throw new Error('AMI not available');
+      if (!this.isInitialized) {
+        throw new Error('Call manager not initialized');
       }
 
-      // Clean the phone number to ensure it's just digits
-      const cleanPhone = phoneNumber.replace(/\D/g, '');
+      console.log(`📞 Initiating call to ${phoneNumber} (${name}) via MagnusBilling`);
 
-      // Use MagnusBilling SIP trunk for outbound calls
-      const sipChannel = `SIP/magnusbilling-trunk/${cleanPhone}`;
+      // Make call through SIP client
+      const callResult = await this.sipClient.makeCall(phoneNumber);
+      const callId = callResult.callId;
 
-      // Create action ID for call tracking
-      const actionId = `call-${cleanPhone}-${Date.now()}`;
+      // Store call information
+      const callInfo = {
+        callId,
+        phoneNumber,
+        name,
+        status: 'dialing',
+        startTime: new Date(),
+        session: callResult.session,
+        events: []
+      };
 
-      console.log(`Using MagnusBilling SIP channel: ${sipChannel}`);
-      console.log(`Using context: incoming`);
-      console.log(`Action ID: ${actionId}`);
+      this.activeCalls.set(callId, callInfo);
 
-      // Originate call through Asterisk using MagnusBilling trunk
-      const response = await ami.action({
-        action: 'Originate',
-        channel: sipChannel,
-        context: 'incoming',
-        exten: cleanPhone,
-        priority: 1,
-        actionid: actionId,
-        CallerID: `"${name}" <${this.config.sip.username}>`, // Assuming config is accessible here or passed in
-        variable: `CALL_ID=${callId},PHONE_NUMBER=${cleanPhone},NAME=${name.replace(/, /g, '_')}`,
-        timeout: 30000,
-        async: true
-      });
-      console.log('AMI Originate result:', response);
-
-      // Update call status
-      this.updateCallStatus(callId, 'Call originated to ' + phoneNumber + ' - dialing');
+      console.log(`✅ Call initiated to ${phoneNumber}, Call ID: ${callId}`);
+      this.addCallEvent(callId, 'call_initiated', `Call to ${phoneNumber} initiated via MagnusBilling`);
 
       return callId;
+
     } catch (error) {
-      console.error('Error initiating call:', error);
-      this.updateCallStatus(callId, 'Failed to initiate call: ' + error.message);
+      console.error('❌ Error initiating call:', error);
       throw error;
     }
   }
@@ -183,33 +206,17 @@ class InteractiveCallManager extends EventEmitter {
 
   async playAudioToCall(callId, audioPath) {
     try {
-      const { getAMI } = require('./asterisk/instance');
-      const ami = getAMI();
-
-      if (!ami) {
-        throw new Error('AMI not available');
-      }
-
       const callData = this.activeCalls.get(callId);
-      if (!callData || !callData.channel) {
-        throw new Error('Call channel not available');
+      if (!callData) {
+        throw new Error('Call not found');
       }
 
-      // Convert audio path to Asterisk format (without extension)
-      const audioFile = path.basename(audioPath, path.extname(audioPath));
+      // Assuming MagnusBillingSIPClient has a method to play audio
+      // This is a placeholder and needs to be implemented in MagnusBillingSIPClient
+      await this.sipClient.playAudio(callData.session, audioPath);
 
-      // Use Playback application
-      const result = await ami.action({
-        action: 'redirect',
-        channel: callData.channel,
-        context: 'interactive-call',
-        exten: 'playback',
-        priority: '1',
-        variable: `AUDIO_FILE=${audioFile}`
-      });
-
-      console.log('Audio playback initiated:', result);
-      return result;
+      console.log(`Audio playback initiated for call ${callId}`);
+      return { success: true };
     } catch (error) {
       console.error('Error playing audio:', error);
       throw error;
@@ -259,9 +266,26 @@ class InteractiveCallManager extends EventEmitter {
   }
 
   async sendManualDTMF(callId, digit) {
-    // Emit DTMF event manually for testing
-    this.emit('menuOption', callId, digit);
-    return { success: true, digit };
+    try {
+      const call = this.activeCalls.get(callId);
+      if (!call) {
+        throw new Error(`Call ${callId} not found`);
+      }
+
+      console.log(`🔢 Sending manual DTMF ${digit} to call ${callId}`);
+
+      // Send DTMF through SIP client
+      await this.sipClient.sendDTMF(digit);
+
+      console.log(`✅ DTMF ${digit} sent successfully`);
+      this.addCallEvent(callId, 'dtmf_sent', `Manual DTMF ${digit} sent`);
+
+      return { success: true, digit };
+
+    } catch (error) {
+      console.error('❌ Error sending manual DTMF:', error);
+      throw error;
+    }
   }
 
   async sendDTMFCode(callId, code) {
@@ -298,21 +322,33 @@ class InteractiveCallManager extends EventEmitter {
 
   async endCall(callId) {
     try {
-      const { getAMI } = require('./asterisk/instance');
-      const ami = getAMI();
-
-      const callData = this.activeCalls.get(callId);
-      if (callData && callData.channel && ami) {
-        await ami.action({
-          action: 'hangup',
-          channel: callData.channel
-        });
+      const call = this.activeCalls.get(callId);
+      if (!call) {
+        throw new Error(`Call ${callId} not found`);
       }
 
-      this.handleCallEnded(callId);
+      console.log(`📴 Ending call ${callId}`);
+
+      // End call through SIP client
+      await this.sipClient.endCall();
+
+      console.log(`✅ Call ${callId} ended successfully`);
+      this.addCallEvent(callId, 'call_ended', 'Call ended manually');
+
+      // Update call status
+      call.status = 'ended';
+      call.endTime = new Date();
+
+      // Remove from active calls after a delay to allow for cleanup
+      setTimeout(() => {
+        this.activeCalls.delete(callId);
+      }, 5000);
+
+      this.emit('callEnded', callId);
       return { success: true };
+
     } catch (error) {
-      console.error('Error ending call:', error);
+      console.error('❌ Error ending call:', error);
       throw error;
     }
   }

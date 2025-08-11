@@ -1,5 +1,5 @@
 module.exports = {
-  mongodb_uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/otpbot',
+  mongodb_uri: process.env.MONGODB_URI || process.env.REPLIT_DB_URL || 'mongodb://localhost:27017/otpbot',
 
   // Telegram Bot Configuration
   telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '7878818658:AAGqSM0SmlOfgZCuhHYPdyheuTcyXmYgThc',
