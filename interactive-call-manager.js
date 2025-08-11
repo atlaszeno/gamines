@@ -1,4 +1,3 @@
-
 const { v4: uuidv4 } = require('uuid');
 const EventEmitter = require('events');
 const path = require('path');
@@ -13,16 +12,16 @@ class InteractiveCallManager extends EventEmitter {
 
   async initialize() {
     if (this.initialized) return;
-    
+
     console.log('🎯 Initializing Interactive Call Manager...');
-    
+
     // Set up event handlers
     this.on('callAnswered', this.handleCallAnswered.bind(this));
     this.on('humanDetected', this.handleHumanDetected.bind(this));
     this.on('showTelegramMenu', this.handleShowTelegramMenu.bind(this));
     this.on('dtmfCodeReceived', this.handleDTMFCode.bind(this));
     this.on('callEnded', this.handleCallEnded.bind(this));
-    
+
     this.initialized = true;
     console.log('✅ Interactive Call Manager initialized');
   }
@@ -30,7 +29,7 @@ class InteractiveCallManager extends EventEmitter {
   async initiateCall(phoneNumber, name = 'Unknown') {
     const callId = uuidv4();
     const timestamp = new Date();
-    
+
     const callData = {
       id: callId,
       phoneNumber,
@@ -40,39 +39,51 @@ class InteractiveCallManager extends EventEmitter {
       events: [],
       ttsRecordings: {}
     };
-    
+
     this.activeCalls.set(callId, callData);
-    
+
     console.log(`Initiating call to ${phoneNumber} (Name: ${name})`);
-    
+
     try {
       // Get AMI instance
       const { getAMI } = require('./asterisk/instance');
       const ami = getAMI();
-      
+
       if (!ami) {
         throw new Error('AMI not available');
       }
-      
-      // Create originate action
-      const action = {
+
+      // Clean the phone number to ensure it's just digits
+      const cleanPhone = phoneNumber.replace(/\D/g, '');
+
+      // Use MagnusBilling SIP trunk for outbound calls
+      const sipChannel = `SIP/magnusbilling-trunk/${cleanPhone}`;
+
+      // Create action ID for call tracking
+      const actionId = `call-${cleanPhone}-${Date.now()}`;
+
+      console.log(`Using MagnusBilling SIP channel: ${sipChannel}`);
+      console.log(`Using context: incoming`);
+      console.log(`Action ID: ${actionId}`);
+
+      // Originate call through Asterisk using MagnusBilling trunk
+      const response = await ami.action({
         action: 'Originate',
-        channel: `SIP/${phoneNumber}@default`,
-        context: 'interactive-call',
-        exten: 's',
-        priority: '1',
-        callerid: `Interactive Call <1234567890>`,
-        variable: `CALL_ID=${callId},TARGET_NUMBER=${phoneNumber},CALLER_NAME=${name}`,
-        timeout: 30000
-      };
-      
-      // Execute originate
-      const result = await ami.action(action);
-      console.log('AMI Originate result:', result);
-      
+        channel: sipChannel,
+        context: 'incoming',
+        exten: cleanPhone,
+        priority: 1,
+        actionid: actionId,
+        CallerID: `"${name}" <${this.config.sip.username}>`, // Assuming config is accessible here or passed in
+        variable: `CALL_ID=${callId},PHONE_NUMBER=${cleanPhone},NAME=${name.replace(/, /g, '_')}`,
+        timeout: 30000,
+        async: true
+      });
+      console.log('AMI Originate result:', response);
+
       // Update call status
       this.updateCallStatus(callId, 'Call originated to ' + phoneNumber + ' - dialing');
-      
+
       return callId;
     } catch (error) {
       console.error('Error initiating call:', error);
@@ -84,7 +95,7 @@ class InteractiveCallManager extends EventEmitter {
   handleCallAnswered(callId, type = 'unknown') {
     console.log(`Update for call ID ${callId}: Call answered - analyzing...`);
     this.updateCallStatus(callId, 'Call answered - analyzing...');
-    
+
     // Simulate brief analysis delay
     setTimeout(() => {
       this.emit('humanDetected', callId);
@@ -94,7 +105,7 @@ class InteractiveCallManager extends EventEmitter {
   handleHumanDetected(callId) {
     console.log(`Update for call ID ${callId}: Human detected - playing intro`);
     this.updateCallStatus(callId, 'Human detected - playing intro');
-    
+
     // Simulate intro playback
     setTimeout(() => {
       console.log(`Update for call ID ${callId}: Playing interactive menu - waiting for DTMF`);
@@ -105,7 +116,7 @@ class InteractiveCallManager extends EventEmitter {
   handleShowTelegramMenu(callId) {
     console.log(`Update for call ID ${callId}: Telegram menu requested`);
     this.updateCallStatus(callId, 'Waiting for audio selection...');
-    
+
     // Emit event to telegram bot
     this.emit('telegramMenuRequested', callId);
   }
@@ -117,7 +128,7 @@ class InteractiveCallManager extends EventEmitter {
       callData.dtmfCode = code;
       this.activeCalls.set(callId, callData);
       this.updateCallStatus(callId, `DTMF code received: ${code}`);
-      
+
       // Emit event for further processing
       this.emit('dtmfProcessed', callId, code);
     }
@@ -130,7 +141,7 @@ class InteractiveCallManager extends EventEmitter {
       callData.status = 'ended';
       callData.endTime = new Date();
       this.updateCallStatus(callId, 'Call ended');
-      
+
       // Clean up after a delay
       setTimeout(() => {
         this.activeCalls.delete(callId);
@@ -165,7 +176,7 @@ class InteractiveCallManager extends EventEmitter {
 
     // Play the audio to the caller
     await this.playAudioToCall(callId, audioPath);
-    
+
     this.updateCallStatus(callId, 'Audio uploaded and playing');
     return { success: true, audioPath };
   }
@@ -174,7 +185,7 @@ class InteractiveCallManager extends EventEmitter {
     try {
       const { getAMI } = require('./asterisk/instance');
       const ami = getAMI();
-      
+
       if (!ami) {
         throw new Error('AMI not available');
       }
@@ -186,7 +197,7 @@ class InteractiveCallManager extends EventEmitter {
 
       // Convert audio path to Asterisk format (without extension)
       const audioFile = path.basename(audioPath, path.extname(audioPath));
-      
+
       // Use Playback application
       const result = await ami.action({
         action: 'redirect',
@@ -213,7 +224,7 @@ class InteractiveCallManager extends EventEmitter {
 
     callData.ttsRecordings = recordings;
     this.activeCalls.set(callId, callData);
-    
+
     return recordings;
   }
 
@@ -271,7 +282,7 @@ class InteractiveCallManager extends EventEmitter {
     }
 
     console.log(`Handling DTMF ${digit} for call ${callId}`);
-    
+
     if (digit === '1') {
       this.emit('showTelegramMenu', callId);
     } else if (digit === '9') {
@@ -289,7 +300,7 @@ class InteractiveCallManager extends EventEmitter {
     try {
       const { getAMI } = require('./asterisk/instance');
       const ami = getAMI();
-      
+
       const callData = this.activeCalls.get(callId);
       if (callData && callData.channel && ami) {
         await ami.action({
@@ -297,7 +308,7 @@ class InteractiveCallManager extends EventEmitter {
           channel: callData.channel
         });
       }
-      
+
       this.handleCallEnded(callId);
       return { success: true };
     } catch (error) {

@@ -14,12 +14,14 @@ module.exports = {
     password: process.env.ASTERISK_PASSWORD || 'amp111'
   },
   
-  // SIP Configuration
+  // SIP Configuration for MagnusBilling
   sip: {
-    host: process.env.SIP_HOST || 'localhost',
-    domain: process.env.SIP_DOMAIN || 'localhost',
-    username: process.env.SIP_USERNAME || 'test',
-    password: process.env.SIP_PASSWORD || 'test123'
+    host: process.env.SIP_HOST || 'your-magnusbilling-server.com',
+    domain: process.env.SIP_DOMAIN || 'your-magnusbilling-server.com',
+    port: process.env.SIP_PORT || 5060,
+    username: process.env.SIP_USERNAME || 'your-sip-username',
+    password: process.env.SIP_PASSWORD || 'your-sip-password',
+    trunk: process.env.SIP_TRUNK || 'magnusbilling-trunk'
   },
   
   // Server Configuration
