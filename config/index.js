@@ -3,7 +3,7 @@ module.exports = {
   mongodb_uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/otpbot',
   
   // Telegram Bot Configuration
-  telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '8030897383:AAEKEgRenaELYI7LGq2rrAWDbY4aCsz-a8Q',
+  telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '7878818658:AAGqSM0SmlOfgZCuhHYPdyheuTcyXmYgThc',
   creator_telegram_id: process.env.CREATOR_TELEGRAM_ID || '8171834446',
   
   // Asterisk AMI Configuration
