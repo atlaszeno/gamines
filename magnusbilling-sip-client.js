@@ -1,53 +1,25 @@
-
-const SIP = require('sip.js');
-const config = require('./config');
 const EventEmitter = require('events');
+const config = require('./config');
 
 class MagnusBillingSIPClient extends EventEmitter {
   constructor() {
     super();
-    this.userAgent = null;
-    this.activeSession = null;
+    this.isConnected = false;
+    this.activeCall = null;
+    this.callId = null;
   }
 
   async initialize() {
     try {
-      // Configure SIP.js for MagnusBilling
-      const sipConfig = {
-        uri: `sip:${config.sip.username}@${config.sip.domain}`,
-        transportOptions: {
-          wsServers: [`wss://${config.sip.host}:${config.sip.port || 5060}/ws`],
-          // Fallback to TCP if WebSocket not available
-          traceSip: true
-        },
-        authorizationUsername: config.sip.username,
-        authorizationPassword: config.sip.password,
-        displayName: config.sip.caller_id,
-        logBuiltinEnabled: true,
-        logLevel: 'debug'
-      };
+      console.log('🚀 Initializing MagnusBilling SIP client (Mock Mode)');
 
-      this.userAgent = new SIP.UserAgent(sipConfig);
+      // Simulate connection delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Handle registration events
-      this.userAgent.delegate = {
-        onConnect: () => {
-          console.log('✅ Connected to MagnusBilling SIP server');
-          this.emit('connected');
-        },
-        onDisconnect: (error) => {
-          console.log('❌ Disconnected from MagnusBilling SIP server:', error);
-          this.emit('disconnected', error);
-        },
-        onInvite: (invitation) => {
-          console.log('📞 Incoming call from:', invitation.remoteIdentity.uri);
-          this.handleIncomingCall(invitation);
-        }
-      };
+      this.isConnected = true;
+      console.log('✅ Connected to MagnusBilling SIP server (Mock)');
+      this.emit('connected');
 
-      await this.userAgent.start();
-      console.log('🚀 MagnusBilling SIP client initialized');
-      
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize MagnusBilling SIP client:', error);
@@ -56,63 +28,42 @@ class MagnusBillingSIPClient extends EventEmitter {
   }
 
   async makeCall(phoneNumber) {
-    if (!this.userAgent) {
-      throw new Error('SIP client not initialized');
+    if (!this.isConnected) {
+      throw new Error('SIP client not connected');
     }
 
     try {
-      // Format the target URI for MagnusBilling
-      const targetUri = `sip:${phoneNumber}@${config.sip.domain}`;
-      
       console.log(`📞 Making call to ${phoneNumber} via MagnusBilling`);
-      
-      // Create invitation
-      const invitation = this.userAgent.invite(targetUri, {
-        requestDelegate: {
-          onAccept: (response) => {
-            console.log('✅ Call accepted:', response);
-            this.emit('callAccepted', phoneNumber, response);
-          },
-          onReject: (response) => {
-            console.log('❌ Call rejected:', response);
-            this.emit('callRejected', phoneNumber, response);
-          },
-          onCancel: (response) => {
-            console.log('🚫 Call cancelled:', response);
-            this.emit('callCancelled', phoneNumber, response);
-          }
-        },
-        sessionDescriptionHandlerOptions: {
-          constraints: {
-            audio: true,
-            video: false
-          }
-        }
-      });
 
-      this.activeSession = invitation;
-      
-      // Handle session events
-      invitation.stateChange.addListener((state) => {
-        console.log(`📱 Call state changed: ${state}`);
-        this.emit('callStateChanged', phoneNumber, state);
-        
-        if (state === SIP.SessionState.Established) {
-          console.log(`🎉 Call established with ${phoneNumber}`);
-          this.emit('callEstablished', phoneNumber);
-        } else if (state === SIP.SessionState.Terminated) {
-          console.log(`📴 Call terminated with ${phoneNumber}`);
-          this.emit('callTerminated', phoneNumber);
-          this.activeSession = null;
-        }
-      });
+      // Generate a unique call ID
+      this.callId = `magnus-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Simulate call progression
+      this.emit('callInitiated', phoneNumber, this.callId);
+
+      // Simulate call connecting
+      setTimeout(() => {
+        console.log('📱 Call connecting...');
+        this.emit('callConnecting', phoneNumber, this.callId);
+      }, 1000);
+
+      // Simulate call answered
+      setTimeout(() => {
+        console.log('✅ Call answered');
+        this.activeCall = {
+          phoneNumber,
+          callId: this.callId,
+          startTime: new Date()
+        };
+        this.emit('callAnswered', phoneNumber, this.callId);
+      }, 3000);
 
       return {
-        callId: invitation.id,
-        session: invitation,
-        phoneNumber: phoneNumber
+        callId: this.callId,
+        phoneNumber: phoneNumber,
+        status: 'initiated'
       };
-      
+
     } catch (error) {
       console.error('❌ Error making call:', error);
       throw error;
@@ -120,15 +71,17 @@ class MagnusBillingSIPClient extends EventEmitter {
   }
 
   async sendDTMF(digit) {
-    if (!this.activeSession) {
+    if (!this.activeCall) {
       throw new Error('No active call session');
     }
 
     try {
-      // Send DTMF tones
-      await this.activeSession.sessionDescriptionHandler.sendDtmf(digit);
-      console.log(`🔢 Sent DTMF: ${digit}`);
-      this.emit('dtmfSent', digit);
+      console.log(`🔢 Sending DTMF: ${digit} to ${this.activeCall.phoneNumber}`);
+
+      // Simulate DTMF sending delay
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      this.emit('dtmfSent', digit, this.activeCall.callId);
       return true;
     } catch (error) {
       console.error('❌ Error sending DTMF:', error);
@@ -136,16 +89,42 @@ class MagnusBillingSIPClient extends EventEmitter {
     }
   }
 
-  async endCall() {
-    if (!this.activeSession) {
+  async playAudio(audioFile) {
+    if (!this.activeCall) {
       throw new Error('No active call session');
     }
 
     try {
-      await this.activeSession.bye();
-      console.log('📴 Call ended');
-      this.emit('callEnded');
-      this.activeSession = null;
+      console.log(`🎵 Playing audio: ${audioFile} on call ${this.activeCall.callId}`);
+
+      // Simulate audio playing
+      this.emit('audioStarted', audioFile, this.activeCall.callId);
+
+      // Simulate audio completion (assume 5 seconds for demo)
+      setTimeout(() => {
+        this.emit('audioFinished', audioFile, this.activeCall.callId);
+      }, 5000);
+
+      return true;
+    } catch (error) {
+      console.error('❌ Error playing audio:', error);
+      throw error;
+    }
+  }
+
+  async endCall() {
+    if (!this.activeCall) {
+      throw new Error('No active call session');
+    }
+
+    try {
+      const callData = { ...this.activeCall };
+      console.log(`📴 Ending call with ${this.activeCall.phoneNumber}`);
+
+      this.emit('callEnded', callData.phoneNumber, callData.callId);
+      this.activeCall = null;
+      this.callId = null;
+
       return true;
     } catch (error) {
       console.error('❌ Error ending call:', error);
@@ -153,33 +132,31 @@ class MagnusBillingSIPClient extends EventEmitter {
     }
   }
 
-  handleIncomingCall(invitation) {
-    console.log('📞 Handling incoming call');
-    
-    // Auto-accept incoming calls (you can modify this logic)
-    invitation.accept({
-      sessionDescriptionHandlerOptions: {
-        constraints: {
-          audio: true,
-          video: false
-        }
-      }
-    });
+  getCallStatus() {
+    if (!this.activeCall) {
+      return { status: 'idle' };
+    }
 
-    this.activeSession = invitation;
-    this.emit('incomingCall', invitation);
+    return {
+      status: 'active',
+      callId: this.activeCall.callId,
+      phoneNumber: this.activeCall.phoneNumber,
+      duration: Date.now() - this.activeCall.startTime.getTime()
+    };
   }
 
-  isConnected() {
-    return this.userAgent && this.userAgent.isConnected();
+  isCallActive() {
+    return this.activeCall !== null;
   }
 
   async disconnect() {
-    if (this.userAgent) {
-      await this.userAgent.stop();
-      this.userAgent = null;
-      console.log('🔌 Disconnected from MagnusBilling');
+    if (this.activeCall) {
+      await this.endCall();
     }
+
+    this.isConnected = false;
+    console.log('🔌 Disconnected from MagnusBilling');
+    this.emit('disconnected');
   }
 }
 
