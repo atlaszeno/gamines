@@ -4,6 +4,7 @@ const config = require("../config");
 
 let bot = null;
 let isStarting = false;
+let instanceId = null;
 const messageQueue = [];
 let isProcessingQueue = false;
 
@@ -94,9 +95,11 @@ async function start_bot_instance() {
   }
 
   isStarting = true;
+  instanceId = Date.now().toString();
 
   try {
     console.log('🚀 Starting Telegram bot with token:', config.telegram_bot_token.substring(0, 20) + '...');
+    console.log('🆔 Bot instance ID:', instanceId);
 
     // Create bot instance without polling first
     bot = new TelegramBot(config.telegram_bot_token, { polling: false });
@@ -104,11 +107,11 @@ async function start_bot_instance() {
     // Clear any existing webhooks first
     try {
       console.log('🔧 Clearing any existing webhooks...');
-      await bot.deleteWebhook({ drop_pending_updates: true });
-      console.log('✅ Webhooks cleared');
+      const result = await bot.setWebHook('', { drop_pending_updates: true });
+      console.log('✅ Webhooks cleared:', result);
       
       // Wait a moment to ensure webhook is fully cleared
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
     } catch (error) {
       console.log('⚠️ Could not clear webhook:', error.message);
     }
@@ -165,14 +168,14 @@ async function start_bot_instance() {
           
           // Clear webhooks again
           try {
-            await bot.deleteWebhook({ drop_pending_updates: true });
+            await bot.setWebHook('', { drop_pending_updates: true });
             console.log('🗑️ Webhooks cleared after conflict');
           } catch (webhookError) {
             console.log('⚠️ Could not clear webhook after conflict:', webhookError.message);
           }
           
-          // Wait before restarting
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          // Wait longer before restarting to ensure other instances timeout
+          await new Promise(resolve => setTimeout(resolve, 15000));
           
           // Restart polling
           console.log('🔄 Restarting bot polling after conflict...');
@@ -234,7 +237,7 @@ async function cleanupBot() {
       }
       
       try {
-        await bot.deleteWebhook({ drop_pending_updates: true });
+        await bot.setWebHook('', { drop_pending_updates: true });
         console.log('🗑️ Webhook deleted and pending updates dropped');
       } catch (error) {
         console.log('⚠️ Could not delete webhook during cleanup:', error.message);
