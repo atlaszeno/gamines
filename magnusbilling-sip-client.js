@@ -25,6 +25,10 @@ class MagnusBillingSIPClient extends EventEmitter {
       console.log(`👤 Using SIP credentials: ${config.sip.username}`);
       console.log(`🏷️  Using Caller ID: ${config.sip.caller_id}`);
 
+      // Test network connectivity first
+      console.log('🔍 Testing network connectivity...');
+      await this.testNetworkConnectivity();
+
       // Find available port
       this.localPort = await this.findAvailablePort();
       console.log(`📞 SIP client will use port ${this.localPort}`);
@@ -32,7 +36,8 @@ class MagnusBillingSIPClient extends EventEmitter {
       // Start SIP stack
       sip.start({
         host: '0.0.0.0',
-        port: this.localPort
+        port: this.localPort,
+        tcp: false // Force UDP
       }, (rq) => {
         this.handleIncomingRequest(rq);
       });
@@ -51,8 +56,38 @@ class MagnusBillingSIPClient extends EventEmitter {
       return true;
     } catch (error) {
       console.error('❌ Failed to initialize MagnusBilling SIP client:', error);
+      console.error('🔍 Possible causes:');
+      console.error('   - Network connectivity issues');
+      console.error('   - Firewall blocking SIP traffic');
+      console.error('   - Invalid SIP credentials');
+      console.error('   - MagnusBilling server unavailable');
       throw error;
     }
+  }
+
+  async testNetworkConnectivity() {
+    return new Promise((resolve, reject) => {
+      const net = require('net');
+      const socket = new net.Socket();
+      
+      const timeout = setTimeout(() => {
+        socket.destroy();
+        reject(new Error(`Cannot reach ${config.sip.host}:${config.sip.port} - Network connectivity test failed`));
+      }, 5000);
+
+      socket.connect(config.sip.port, config.sip.host, () => {
+        clearTimeout(timeout);
+        console.log('✅ Network connectivity test passed');
+        socket.destroy();
+        resolve();
+      });
+
+      socket.on('error', (err) => {
+        clearTimeout(timeout);
+        console.error(`❌ Network connectivity test failed: ${err.message}`);
+        reject(new Error(`Cannot reach ${config.sip.host}:${config.sip.port} - ${err.message}`));
+      });
+    });
   }
 
   async findAvailablePort() {
@@ -74,20 +109,29 @@ class MagnusBillingSIPClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       try {
         console.log('✅ SIP registration initiated');
+        console.log(`🔗 Registering to: sip:${config.sip.host}:${config.sip.port}`);
 
         const callId = this.generateCallId();
         const fromTag = this.generateTag();
 
+        // Set a timeout for the registration
+        const timeout = setTimeout(() => {
+          reject(new Error(`Registration timeout - cannot reach ${config.sip.host}:${config.sip.port}. Check network connectivity and firewall settings.`));
+        }, 10000); // 10 second timeout
+
         const registerRequest = {
           method: 'REGISTER',
-          uri: `sip:${config.sip.host}`,
+          uri: `sip:${config.sip.host}:${config.sip.port}`,
           version: '2.0',
           headers: {
             via: [{
               version: '2.0',
               protocol: 'UDP',
               host: '0.0.0.0',
-              port: this.localPort
+              port: this.localPort,
+              params: {
+                branch: `z9hG4bK-${Math.random().toString(36).substr(2, 15)}`
+              }
             }],
             from: {
               name: config.sip.username,
@@ -104,24 +148,46 @@ class MagnusBillingSIPClient extends EventEmitter {
               name: config.sip.username,
               uri: `sip:${config.sip.username}@0.0.0.0:${this.localPort}`
             }],
-            expires: 3600
+            expires: 300, // Shorter expiry for testing
+            'user-agent': 'Replit-SIP-Client/1.0'
           }
         };
 
+        console.log(`📤 Sending REGISTER to ${config.sip.host}:${config.sip.port}`);
+        console.log(`📧 Using credentials: ${config.sip.username}@${config.sip.host}`);
+
         sip.send(registerRequest, (response) => {
+          clearTimeout(timeout);
+          
+          console.log(`📥 SIP Response: ${response.status} ${response.reason || ''}`);
+          
           if (response.status === 200) {
             console.log('✅ SIP registration successful');
             this.isRegistered = true;
             resolve();
           } else if (response.status === 401 || response.status === 407) {
             console.log('🔐 Authentication required, sending credentials...');
-            this.handleAuthChallenge(registerRequest, response).then(resolve).catch(reject);
+            this.handleAuthChallenge(registerRequest, response).then(() => {
+              clearTimeout(timeout);
+              resolve();
+            }).catch((err) => {
+              clearTimeout(timeout);
+              reject(err);
+            });
+          } else if (response.status === 403) {
+            clearTimeout(timeout);
+            reject(new Error(`Registration forbidden (403) - Invalid credentials or account disabled`));
+          } else if (response.status === 404) {
+            clearTimeout(timeout);
+            reject(new Error(`Registration failed (404) - SIP domain not found`));
           } else {
-            reject(new Error(`Registration failed with status: ${response.status}`));
+            clearTimeout(timeout);
+            reject(new Error(`Registration failed with status: ${response.status} ${response.reason || ''}`));
           }
         });
 
       } catch (error) {
+        console.error('❌ Registration setup error:', error);
         reject(error);
       }
     });

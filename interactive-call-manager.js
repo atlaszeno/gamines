@@ -64,7 +64,14 @@ class InteractiveCallManager extends EventEmitter {
       console.log('✅ Interactive Call Manager initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize Interactive Call Manager:', error);
-      throw error;
+      console.log('⚠️ Initializing without SIP functionality...');
+
+      // Initialize without SIP client for basic functionality
+      this.sipClient = null;
+      this.initialized = true;
+      console.log('✅ Interactive Call Manager initialized in fallback mode');
+
+      // Don't throw error, continue with limited functionality
     }
   }
 
