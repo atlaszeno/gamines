@@ -1,0 +1,42 @@
+ℹ️ Development mode - skipping local Asterisk AMI connection
+✅ DTMF Event Bridge established successfully
+✅ Simple database initialized
+🚀 Initializing Interactive Call Manager...
+🚀 Initializing MagnusBilling SIP client (REAL MODE)
+📡 Connecting to MagnusBilling server: 162.33.178.85:5060
+👤 Using SIP credentials: 96938
+🏷️  Using Caller ID: 13234624261
+🚀 Server running on port 3000
+🌐 Health check available at http://localhost:3000/
+📞 SIP client will use port 37992
+📝 SIP configuration created
+🔄 Starting real SIP client...
+ GET / 200 3.954 ms - 102ated
+❌ Failed to initialize MagnusBilling SIP client: Error: Registration failed with status: 408
+    at /home/runner/workspace/magnusbilling-sip-client.js:120:20
+    at searching (/home/runner/workspace/node_modules/sip/sip.js:1316:5)
+    at /home/runner/workspace/node_modules/sip/sip.js:1297:41
+    at Object.timerF (/home/runner/workspace/node_modules/sip/sip.js:1198:7)
+    at Object.signal (/home/runner/workspace/node_modules/sip/sip.js:982:55)
+    at Timeout.<anonymous> (/home/runner/workspace/node_modules/sip/sip.js:1180:38)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+❌ Failed to initialize Interactive Call Manager: Error: Registration failed with status: 408
+    at /home/runner/workspace/magnusbilling-sip-client.js:120:20
+    at searching (/home/runner/workspace/node_modules/sip/sip.js:1316:5)
+    at /home/runner/workspace/node_modules/sip/sip.js:1297:41
+    at Object.timerF (/home/runner/workspace/node_modules/sip/sip.js:1198:7)
+    at Object.signal (/home/runner/workspace/node_modules/sip/sip.js:982:55)
+    at Timeout.<anonymous> (/home/runner/workspace/node_modules/sip/sip.js:1180:38)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+Application initialization error: Error: Registration failed with status: 408
+    at /home/runner/workspace/magnusbilling-sip-client.js:120:20
+    at searching (/home/runner/workspace/node_modules/sip/sip.js:1316:5)
+    at /home/runner/workspace/node_modules/sip/sip.js:1297:41
+    at Object.timerF (/home/runner/workspace/node_modules/sip/sip.js:1198:7)
+    at Object.signal (/home/runner/workspace/node_modules/sip/sip.js:982:55)
+    at Timeout.<anonymous> (/home/runner/workspace/node_modules/sip/sip.js:1180:38)
+    at listOnTimeout (node:internal/timers:588:17)
+    at process.processTimers (node:internal/timers:523:7)
+⚠️ Continuing with limited functionality...
