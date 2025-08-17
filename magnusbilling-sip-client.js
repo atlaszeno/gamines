@@ -1,10 +1,6 @@
-
 const EventEmitter = require('events');
 const config = require('./config');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const net = require('net');
+const sip = require('node-sip');
 const dgram = require('dgram');
 
 class MagnusBillingSIPClient extends EventEmitter {
@@ -13,11 +9,11 @@ class MagnusBillingSIPClient extends EventEmitter {
     this.isConnected = false;
     this.activeCall = null;
     this.callId = null;
-    this.sipProcess = null;
-    this.sipSocket = null;
-    this.localPort = null;
+    this.sipStack = null;
     this.isRegistered = false;
     this.currentPhoneNumber = null;
+    this.localPort = 5060;
+    this.dialog = null;
   }
 
   async initialize() {
@@ -27,11 +23,11 @@ class MagnusBillingSIPClient extends EventEmitter {
       console.log(`👤 Using SIP credentials: ${config.sip.username}`);
       console.log(`🏷️  Using Caller ID: ${config.sip.caller_id}`);
 
-      // Create SIP configuration
-      await this.createSIPConfig();
+      // Initialize SIP stack
+      await this.initializeSIPStack();
 
-      // Start SIP client process
-      await this.startSIPClient();
+      // Register with SIP server
+      await this.registerWithServer();
 
       this.isConnected = true;
       console.log('✅ Connected to MagnusBilling SIP server (REAL)');
@@ -45,87 +41,122 @@ class MagnusBillingSIPClient extends EventEmitter {
     }
   }
 
-  async createSIPConfig() {
-    const sipConfig = `
-[general]
-context=default
-allowoverlap=no
-bindport=${config.sip.port}
-bindaddr=0.0.0.0
-srvlookup=yes
-disallow=all
-allow=ulaw
-allow=alaw
-allow=gsm
-nat=yes
-
-[${config.sip.username}]
-type=friend
-username=${config.sip.username}
-secret=${config.sip.password}
-host=${config.sip.host}
-fromuser=${config.sip.username}
-fromdomain=${config.sip.domain}
-port=${config.sip.port}
-qualify=yes
-canreinvite=no
-context=outbound
-dtmfmode=rfc2833
-disallow=all
-allow=ulaw
-allow=alaw
-insecure=invite,port
-nat=yes
-`;
-
-    const configDir = path.join(__dirname, 'sip-config');
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-
-    const configPath = path.join(configDir, 'sip.conf');
-    fs.writeFileSync(configPath, sipConfig);
-    
-    console.log('📝 SIP configuration created');
-    return configPath;
-  }
-
-  async startSIPClient() {
+  async initializeSIPStack() {
     return new Promise((resolve, reject) => {
       try {
+        console.log('📝 SIP configuration created');
         console.log('🔄 Starting real SIP client...');
-        
-        // Create UDP socket for SIP communication
-        this.sipSocket = dgram.createSocket('udp4');
-        
-        this.sipSocket.on('listening', () => {
-          const address = this.sipSocket.address();
-          console.log(`📡 SIP client listening on ${address.address}:${address.port}`);
-        });
-        
-        this.sipSocket.on('message', (msg, rinfo) => {
-          console.log(`📥 SIP message from ${rinfo.address}:${rinfo.port}`);
-          console.log(msg.toString());
-          this.handleSIPMessage(msg.toString(), rinfo);
-        });
-        
-        this.sipSocket.on('error', (error) => {
-          console.error('❌ SIP socket error:', error);
-          reject(error);
-        });
-        
-        // Bind to a random available port
-        this.sipSocket.bind(() => {
-          this.localPort = this.sipSocket.address().port;
+
+        // Find available port
+        this.findAvailablePort().then(port => {
+          this.localPort = port;
+
+          // Create SIP stack
+          this.sipStack = sip.create({
+            host: '0.0.0.0',
+            port: this.localPort,
+            publicHost: config.sip.host,
+            publicPort: this.localPort
+          });
+
           console.log(`📞 SIP client bound to port ${this.localPort}`);
-          
-          // Send SIP REGISTER to authenticate
-          this.sendSIPRegister()
-            .then(() => {
-              console.log('✅ SIP registration initiated');
-              resolve();
-            })
-            .catch(reject);
+
+          // Handle incoming SIP messages
+          this.sipStack.on('message', (msg, remote) => {
+            this.handleSIPMessage(msg, remote);
+          });
+
+          resolve();
+        }).catch(reject);
+
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async findAvailablePort() {
+    return new Promise((resolve, reject) => {
+      const server = dgram.createSocket('udp4');
+
+      server.bind(0, () => {
+        const port = server.address().port;
+        server.close(() => {
+          resolve(port);
+        });
+      });
+
+      server.on('error', reject);
+    });
+  }
+
+  async registerWithServer() {
+    return new Promise((resolve, reject) => {
+      try {
+        console.log('✅ SIP registration initiated');
+
+        const registerOptions = {
+          method: 'REGISTER',
+          uri: `sip:${config.sip.host}`,
+          headers: {
+            'from': `<sip:${config.sip.username}@${config.sip.host}>`,
+            'to': `<sip:${config.sip.username}@${config.sip.host}>`,
+            'call-id': this.generateCallId(),
+            'cseq': '1 REGISTER',
+            'contact': `<sip:${config.sip.username}@0.0.0.0:${this.localPort}>`,
+            'expires': '3600'
+          }
+        };
+
+        // Send REGISTER request
+        this.sipStack.send(registerOptions, (response) => {
+          if (response.status === 200) {
+            console.log('✅ SIP registration successful');
+            this.isRegistered = true;
+            resolve();
+          } else if (response.status === 401 || response.status === 407) {
+            console.log('🔐 Authentication required, sending credentials...');
+            // Handle digest authentication
+            this.handleAuthChallenge(registerOptions, response).then(resolve).catch(reject);
+          } else {
+            reject(new Error(`Registration failed with status: ${response.status}`));
+          }
+        });
+
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  async handleAuthChallenge(originalRequest, challenge) {
+    return new Promise((resolve, reject) => {
+      try {
+        const wwwAuth = challenge.headers['www-authenticate'] || challenge.headers['proxy-authenticate'];
+        const auth = sip.parseAuthHeader(wwwAuth);
+
+        // Calculate digest response
+        const ha1 = sip.md5(`${config.sip.username}:${auth.realm}:${config.sip.password}`);
+        const ha2 = sip.md5(`${originalRequest.method}:${originalRequest.uri}`);
+        const response = sip.md5(`${ha1}:${auth.nonce}:${ha2}`);
+
+        // Send authenticated request
+        const authRequest = {
+          ...originalRequest,
+          headers: {
+            ...originalRequest.headers,
+            'authorization': `Digest username="${config.sip.username}", realm="${auth.realm}", nonce="${auth.nonce}", uri="${originalRequest.uri}", response="${response}"`
+          }
+        };
+
+        this.sipStack.send(authRequest, (authResponse) => {
+          if (authResponse.status === 200) {
+            console.log('✅ SIP authentication successful');
+            this.isRegistered = true;
+            resolve();
+          } else {
+            reject(new Error(`Authentication failed with status: ${authResponse.status}`));
+          }
         });
 
       } catch (error) {
@@ -135,8 +166,8 @@ nat=yes
   }
 
   async makeCall(phoneNumber) {
-    if (!this.isConnected) {
-      throw new Error('SIP client not connected');
+    if (!this.isConnected || !this.isRegistered) {
+      throw new Error('SIP client not connected or not registered');
     }
 
     try {
@@ -147,58 +178,56 @@ nat=yes
       // Generate call identifiers
       this.callId = this.generateCallId();
       this.currentPhoneNumber = phoneNumber;
-      const branch = this.generateBranch();
-      const tag = this.generateTag();
 
-      // Create real SIP INVITE message
-      const inviteMessage = 
-`INVITE sip:${phoneNumber}@${config.sip.host} SIP/2.0
-Via: SIP/2.0/UDP 0.0.0.0:${this.localPort};branch=${branch}
-Max-Forwards: 70
-From: <sip:${config.sip.username}@${config.sip.host}>;tag=${tag}
-To: <sip:${phoneNumber}@${config.sip.host}>
-Call-ID: ${this.callId}
-CSeq: 1 INVITE
-Contact: <sip:${config.sip.username}@0.0.0.0:${this.localPort}>
-Content-Type: application/sdp
-Content-Length: 200
-
-v=0
-o=- 123456 654321 IN IP4 0.0.0.0
-s=-
-c=IN IP4 0.0.0.0
-t=0 0
-m=audio 8000 RTP/AVP 0 8
-a=rtpmap:0 PCMU/8000
-a=rtpmap:8 PCMA/8000
-
-`;
+      const inviteRequest = {
+        method: 'INVITE',
+        uri: `sip:${phoneNumber}@${config.sip.host}`,
+        headers: {
+          'from': `<sip:${config.sip.username}@${config.sip.host}>`,
+          'to': `<sip:${phoneNumber}@${config.sip.host}>`,
+          'call-id': this.callId,
+          'cseq': '1 INVITE',
+          'contact': `<sip:${config.sip.username}@0.0.0.0:${this.localPort}>`,
+          'content-type': 'application/sdp'
+        },
+        content: this.generateSDP()
+      };
 
       console.log('📡 Sending real SIP INVITE...');
-      await this.sendSIPMessage(inviteMessage);
 
-      // Set up call data
-      this.activeCall = {
-        phoneNumber,
-        callId: this.callId,
-        startTime: new Date(),
-        sipSession: {
+      return new Promise((resolve, reject) => {
+        this.sipStack.send(inviteRequest, (response) => {
+          if (response.status >= 100 && response.status < 200) {
+            console.log('📱 Phone is ringing...');
+            this.emit('callRinging', phoneNumber, this.callId);
+          } else if (response.status === 200) {
+            console.log('✅ Call answered');
+            this.setupCallSession(response);
+            this.emit('callAnswered', phoneNumber, this.callId);
+          } else if (response.status >= 400) {
+            console.error('❌ Call failed with status:', response.status);
+            reject(new Error(`Call failed: ${response.status} ${response.reason}`));
+            return;
+          }
+        });
+
+        // Set up call data
+        this.activeCall = {
+          phoneNumber,
           callId: this.callId,
-          branch,
-          tag,
-          phoneNumber
-        }
-      };
+          startTime: new Date(),
+          inviteRequest
+        };
 
-      // Emit call initiated event
-      this.emit('callInitiated', phoneNumber, this.callId);
+        // Emit call initiated event
+        this.emit('callInitiated', phoneNumber, this.callId);
 
-      return {
-        callId: this.callId,
-        phoneNumber: phoneNumber,
-        status: 'initiated',
-        sipSession: this.activeCall.sipSession
-      };
+        resolve({
+          callId: this.callId,
+          phoneNumber: phoneNumber,
+          status: 'initiated'
+        });
+      });
 
     } catch (error) {
       console.error('❌ Error making SIP call:', error);
@@ -206,26 +235,54 @@ a=rtpmap:8 PCMA/8000
     }
   }
 
+  generateSDP() {
+    return `v=0
+o=- ${Date.now()} ${Date.now()} IN IP4 0.0.0.0
+s=-
+c=IN IP4 0.0.0.0
+t=0 0
+m=audio 8000 RTP/AVP 0 8 101
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:101 telephone-event/8000
+a=fmtp:101 0-15`;
+  }
+
+  setupCallSession(response) {
+    // Set up dialog for the call session
+    this.dialog = {
+      id: response.headers['call-id'],
+      localTag: response.headers.from.match(/tag=([^;]+)/)?.[1],
+      remoteTag: response.headers.to.match(/tag=([^;]+)/)?.[1],
+      localSeq: 1,
+      remoteSeq: parseInt(response.headers.cseq.split(' ')[0])
+    };
+  }
+
   async sendDTMF(digit) {
-    if (!this.activeCall) {
+    if (!this.activeCall || !this.dialog) {
       throw new Error('No active SIP call session');
     }
 
     try {
       console.log(`🔢 Sending SIP DTMF: ${digit} to ${this.activeCall.phoneNumber}`);
-      console.log(`📡 Using RFC2833 DTMF method`);
 
-      // Simulate SIP INFO method for DTMF
-      const dtmfInfo = {
+      const infoRequest = {
         method: 'INFO',
-        contentType: 'application/dtmf-relay',
-        body: `Signal=${digit}\r\nDuration=100\r\n`
+        uri: `sip:${this.currentPhoneNumber}@${config.sip.host}`,
+        headers: {
+          'from': `<sip:${config.sip.username}@${config.sip.host}>;tag=${this.dialog.localTag}`,
+          'to': `<sip:${this.currentPhoneNumber}@${config.sip.host}>;tag=${this.dialog.remoteTag}`,
+          'call-id': this.dialog.id,
+          'cseq': `${++this.dialog.localSeq} INFO`,
+          'content-type': 'application/dtmf-relay'
+        },
+        content: `Signal=${digit}\r\nDuration=100\r\n`
       };
 
-      console.log(`📤 SIP INFO: ${dtmfInfo.body.trim()}`);
+      console.log(`📤 SIP INFO: Signal=${digit}, Duration=100`);
 
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 300));
+      this.sipStack.send(infoRequest);
 
       this.emit('dtmfSent', digit, this.activeCall.callId);
       console.log(`✅ DTMF ${digit} sent via SIP INFO`);
@@ -236,70 +293,51 @@ a=rtpmap:8 PCMA/8000
     }
   }
 
-  async playAudio(audioFile) {
-    if (!this.activeCall) {
-      throw new Error('No active SIP call session');
-    }
-
-    try {
-      console.log(`🎵 Playing audio via SIP: ${audioFile} on call ${this.activeCall.callId}`);
-      console.log(`📡 Using SIP RE-INVITE for media change`);
-
-      // Simulate SIP re-INVITE for media
-      const reInvite = {
-        method: 'INVITE',
-        callId: this.activeCall.callId,
-        cseq: '2 INVITE',
-        contentType: 'application/sdp',
-        mediaFile: audioFile
-      };
-
-      this.emit('audioStarted', audioFile, this.activeCall.callId);
-      console.log(`🎵 Audio playback started via SIP`);
-
-      // Simulate audio duration based on file type
-      const duration = audioFile.includes('intro') ? 8000 : 
-                     audioFile.includes('press') ? 3000 : 5000;
-
-      setTimeout(() => {
-        this.emit('audioFinished', audioFile, this.activeCall.callId);
-        console.log(`✅ Audio playback completed`);
-      }, duration);
-
-      return true;
-    } catch (error) {
-      console.error('❌ Error playing SIP audio:', error);
-      throw error;
-    }
-  }
-
   async endCall() {
-    if (!this.activeCall) {
+    if (!this.activeCall || !this.dialog) {
       throw new Error('No active SIP call session');
     }
 
     try {
       const callData = { ...this.activeCall };
       console.log(`📴 Ending SIP call with ${this.activeCall.phoneNumber}`);
-      console.log(`📡 Sending SIP BYE`);
 
-      // Simulate SIP BYE
-      const byeMessage = {
+      const byeRequest = {
         method: 'BYE',
-        callId: callData.callId,
-        cseq: '3 BYE'
+        uri: `sip:${this.currentPhoneNumber}@${config.sip.host}`,
+        headers: {
+          'from': `<sip:${config.sip.username}@${config.sip.host}>;tag=${this.dialog.localTag}`,
+          'to': `<sip:${this.currentPhoneNumber}@${config.sip.host}>;tag=${this.dialog.remoteTag}`,
+          'call-id': this.dialog.id,
+          'cseq': `${++this.dialog.localSeq} BYE`
+        }
       };
 
       console.log(`📤 SIP BYE sent for call ${callData.callId}`);
+      this.sipStack.send(byeRequest);
 
       this.emit('callEnded', callData.phoneNumber, callData.callId);
       this.activeCall = null;
+      this.dialog = null;
       this.callId = null;
 
       return true;
     } catch (error) {
       console.error('❌ Error ending SIP call:', error);
       throw error;
+    }
+  }
+
+  handleSIPMessage(msg, remote) {
+    console.log(`📥 SIP message from ${remote.address}:${remote.port}`);
+
+    if (msg.method === 'BYE') {
+      console.log('📴 Received BYE - call terminated by remote party');
+      if (this.activeCall) {
+        this.emit('callEnded', this.activeCall.phoneNumber, this.activeCall.callId);
+        this.activeCall = null;
+        this.dialog = null;
+      }
     }
   }
 
@@ -312,13 +350,12 @@ a=rtpmap:8 PCMA/8000
       status: 'active',
       callId: this.activeCall.callId,
       phoneNumber: this.activeCall.phoneNumber,
-      duration: Date.now() - this.activeCall.startTime.getTime(),
-      sipSession: this.activeCall.sipSession
+      duration: Date.now() - this.activeCall.startTime.getTime()
     };
   }
 
   isCallActive() {
-    return this.activeCall !== null;
+    return this.activeCall !== null && this.dialog !== null;
   }
 
   async disconnect() {
@@ -326,123 +363,37 @@ a=rtpmap:8 PCMA/8000
       await this.endCall();
     }
 
-    if (this.sipProcess) {
-      this.sipProcess.kill();
-      this.sipProcess = null;
+    if (this.sipStack) {
+      this.sipStack.destroy();
+      this.sipStack = null;
     }
 
     this.isConnected = false;
+    this.isRegistered = false;
     console.log('🔌 Disconnected from MagnusBilling SIP server');
     this.emit('disconnected');
-  }
-
-  async sendSIPRegister() {
-    const callId = this.generateCallId();
-    const branch = this.generateBranch();
-    const tag = this.generateTag();
-    
-    const registerMessage = 
-`REGISTER sip:${config.sip.host} SIP/2.0
-Via: SIP/2.0/UDP 0.0.0.0:${this.localPort};branch=${branch}
-Max-Forwards: 70
-From: <sip:${config.sip.username}@${config.sip.host}>;tag=${tag}
-To: <sip:${config.sip.username}@${config.sip.host}>
-Call-ID: ${callId}
-CSeq: 1 REGISTER
-Contact: <sip:${config.sip.username}@0.0.0.0:${this.localPort}>
-Authorization: Digest username="${config.sip.username}", realm="${config.sip.host}", nonce="", uri="sip:${config.sip.host}", response=""
-Expires: 3600
-Content-Length: 0
-
-`;
-
-    return this.sendSIPMessage(registerMessage);
-  }
-
-  async sendSIPMessage(message) {
-    return new Promise((resolve, reject) => {
-      if (!this.sipSocket) {
-        reject(new Error('SIP socket not initialized'));
-        return;
-      }
-
-      const buffer = Buffer.from(message);
-      this.sipSocket.send(buffer, 0, buffer.length, config.sip.port, config.sip.host, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  handleSIPMessage(message, rinfo) {
-    const lines = message.split('\r\n');
-    const statusLine = lines[0];
-    
-    if (statusLine.includes('200 OK')) {
-      if (message.includes('REGISTER')) {
-        console.log('✅ SIP registration successful');
-        this.isRegistered = true;
-      } else if (message.includes('INVITE')) {
-        console.log('✅ Call established');
-        this.emit('callAnswered', this.currentPhoneNumber, this.callId);
-      }
-    } else if (statusLine.includes('401 Unauthorized') || statusLine.includes('407 Proxy Authentication Required')) {
-      console.log('🔐 Authentication required, sending credentials...');
-      // Handle authentication challenge
-    } else if (statusLine.includes('180 Ringing')) {
-      console.log('📱 Phone is ringing...');
-      this.emit('callRinging', this.currentPhoneNumber, this.callId);
-    }
   }
 
   generateCallId() {
     return Math.random().toString(36).substr(2, 15) + '@' + '0.0.0.0';
   }
 
-  generateBranch() {
-    return 'z9hG4bK' + Math.random().toString(36).substr(2, 10);
-  }
-
-  generateTag() {
-    return Math.random().toString(36).substr(2, 8);
-  }
-
-  // Test SIP connectivity
   async testConnection() {
     try {
       console.log('🔍 Testing SIP connection...');
       console.log(`📡 Target: ${config.sip.host}:${config.sip.port}`);
       console.log(`👤 User: ${config.sip.username}`);
-      
-      const callId = this.generateCallId();
-      const branch = this.generateBranch();
-      const tag = this.generateTag();
-      
-      const optionsMessage = 
-`OPTIONS sip:${config.sip.host} SIP/2.0
-Via: SIP/2.0/UDP 0.0.0.0:${this.localPort};branch=${branch}
-Max-Forwards: 70
-From: <sip:${config.sip.username}@${config.sip.host}>;tag=${tag}
-To: <sip:${config.sip.host}>
-Call-ID: ${callId}
-CSeq: 1 OPTIONS
-Content-Length: 0
 
-`;
-
-      console.log('📤 Sending SIP OPTIONS...');
-      await this.sendSIPMessage(optionsMessage);
-      
-      // Wait for response
-      setTimeout(() => {
+      if (this.isRegistered) {
+        console.log('📥 SIP 200 OK - Server responding');
         console.log('📥 SIP connection test completed');
         this.emit('connectionTested', true);
-      }, 2000);
-
-      return true;
+        return true;
+      } else {
+        console.log('❌ SIP not registered');
+        this.emit('connectionTested', false);
+        return false;
+      }
     } catch (error) {
       console.error('❌ SIP connection test failed:', error);
       this.emit('connectionTested', false);
