@@ -2,7 +2,7 @@ module.exports = {
   mongodb_uri: process.env.MONGODB_URI || process.env.REPLIT_DB_URL || 'mongodb://localhost:27017/otpbot',
 
   // Telegram Bot Configuration
-  telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '8431827604:AAHBRy1EvVatMibGly43IB0gR2F-Md2MlvE',
+  telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '8030897383:AAEKEgRenaELYI7LGq2rrAWDbY4aCsz-a8Q',
   creator_telegram_id: process.env.CREATOR_TELEGRAM_ID || '8171834446',
 
   // Asterisk AMI Configuration (This is for your Asterisk server, not MagnusBilling's AMI)
@@ -17,8 +17,8 @@ module.exports = {
   // SIP Configuration for MagnusBilling (as your SIP provider/trunk)
   sip: {
     // This host/domain is the public IP/domain of your MagnusBilling server
-    host: process.env.SIP_HOST || '162.33.178.85', // From trunk info: Host
-    domain: process.env.SIP_DOMAIN || '162.33.178.85', // Same as host
+    host: process.env.SIP_HOST || '77.105.162.184', // From trunk info: Host
+    domain: process.env.SIP_DOMAIN || '77.105.162.184', // Same as host
     port: process.env.SIP_PORT || 5060, // Standard SIP port
 
     // These are the credentials for the SIP user/account you want to use on MagnusBilling
