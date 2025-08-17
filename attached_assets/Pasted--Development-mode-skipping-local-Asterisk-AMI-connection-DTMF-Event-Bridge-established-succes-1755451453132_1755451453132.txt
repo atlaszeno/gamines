@@ -1,0 +1,47 @@
+ℹ️ Development mode - skipping local Asterisk AMI connection
+✅ DTMF Event Bridge established successfully
+✅ Simple database initialized
+🚀 Initializing Interactive Call Manager...
+🚀 Initializing MagnusBilling SIP client (Mock Mode)
+📡 Connecting to MagnusBilling server: 162.33.178.85:5060
+👤 Using SIP credentials: 96938
+🏷️  Using Caller ID: 13234624261
+🚀 Server running on port 3000
+🌐 Health check available at http://localhost:3000/
+GET / 200 3.862 ms - 102
+✅ Connected to MagnusBilling SIP server (Mock)
+✅ Trunk configured: Sstar (moveon)
+✅ SIP connection established
+✅ Interactive Call Manager initialized successfully
+Interactive call manager initialized
+Initializing Telegram bot...
+🚀 Starting Telegram bot with token: 8431827604:AAHBRy1Ev...
+🔧 Clearing any existing webhooks...
+⚠️ Could not clear webhook: bot.deleteWebhook is not a function
+🔄 Starting bot polling...
+✅ Bot connected successfully: Unkownzspoofbot
+🆔 Bot ID: 8431827604
+✅ Telegram bot instance created and configured
+Bot initialized with admin ID: 8171834446
+❌ Polling error: ETELEGRAM: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+🔧 Conflict detected - stopping current bot...
+⏹️ Polling stopped
+⚠️ Could not clear webhook after conflict: bot.deleteWebhook is not a function
+🔄 Restarting bot polling after conflict...
+✅ Bot polling restarted successfully
+❌ Polling error: ETELEGRAM: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+🔧 Conflict detected - stopping current bot...
+⏹️ Polling stopped
+⚠️ Could not clear webhook after conflict: bot.deleteWebhook is not a function
+🔄 Restarting bot polling after conflict...
+✅ Bot polling restarted successfully
+❌ Polling error: ETELEGRAM: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+🔧 Conflict detected - stopping current bot...
+⏹️ Polling stopped
+⚠️ Could not clear webhook after conflict: bot.deleteWebhook is not a function
+🔄 Restarting bot polling after conflict...
+✅ Bot polling restarted successfully
+❌ Polling error: ETELEGRAM: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+🔧 Conflict detected - stopping current bot...
+⏹️ Polling stopped
+⚠️ Could not clear webhook after conflict: bot.deleteWebhook is not a function
