@@ -56,6 +56,10 @@ class InteractiveCallManager extends EventEmitter {
 
       console.log('✅ SIP connection established');
 
+      // Test SIP connectivity
+      console.log('🔍 Testing SIP connectivity...');
+      await this.sipClient.testConnection();
+
       this.initialized = true;
       console.log('✅ Interactive Call Manager initialized successfully');
     } catch (error) {
