@@ -1,7 +1,9 @@
+
 const EventEmitter = require('events');
 const config = require('./config');
-const sip = require('node-sip');
+const sip = require('sip');
 const dgram = require('dgram');
+const crypto = require('crypto');
 
 class MagnusBillingSIPClient extends EventEmitter {
   constructor() {
@@ -9,11 +11,11 @@ class MagnusBillingSIPClient extends EventEmitter {
     this.isConnected = false;
     this.activeCall = null;
     this.callId = null;
-    this.sipStack = null;
     this.isRegistered = false;
     this.currentPhoneNumber = null;
     this.localPort = 5060;
     this.dialog = null;
+    this.cseq = 1;
   }
 
   async initialize() {
@@ -23,8 +25,20 @@ class MagnusBillingSIPClient extends EventEmitter {
       console.log(`👤 Using SIP credentials: ${config.sip.username}`);
       console.log(`🏷️  Using Caller ID: ${config.sip.caller_id}`);
 
-      // Initialize SIP stack
-      await this.initializeSIPStack();
+      // Find available port
+      this.localPort = await this.findAvailablePort();
+      console.log(`📞 SIP client will use port ${this.localPort}`);
+
+      // Start SIP stack
+      sip.start({
+        host: '0.0.0.0',
+        port: this.localPort
+      }, (rq) => {
+        this.handleIncomingRequest(rq);
+      });
+
+      console.log('📝 SIP configuration created');
+      console.log('🔄 Starting real SIP client...');
 
       // Register with SIP server
       await this.registerWithServer();
@@ -39,40 +53,6 @@ class MagnusBillingSIPClient extends EventEmitter {
       console.error('❌ Failed to initialize MagnusBilling SIP client:', error);
       throw error;
     }
-  }
-
-  async initializeSIPStack() {
-    return new Promise((resolve, reject) => {
-      try {
-        console.log('📝 SIP configuration created');
-        console.log('🔄 Starting real SIP client...');
-
-        // Find available port
-        this.findAvailablePort().then(port => {
-          this.localPort = port;
-
-          // Create SIP stack
-          this.sipStack = sip.create({
-            host: '0.0.0.0',
-            port: this.localPort,
-            publicHost: config.sip.host,
-            publicPort: this.localPort
-          });
-
-          console.log(`📞 SIP client bound to port ${this.localPort}`);
-
-          // Handle incoming SIP messages
-          this.sipStack.on('message', (msg, remote) => {
-            this.handleSIPMessage(msg, remote);
-          });
-
-          resolve();
-        }).catch(reject);
-
-      } catch (error) {
-        reject(error);
-      }
-    });
   }
 
   async findAvailablePort() {
@@ -95,29 +75,47 @@ class MagnusBillingSIPClient extends EventEmitter {
       try {
         console.log('✅ SIP registration initiated');
 
-        const registerOptions = {
+        const callId = this.generateCallId();
+        const fromTag = this.generateTag();
+
+        const registerRequest = {
           method: 'REGISTER',
           uri: `sip:${config.sip.host}`,
+          version: '2.0',
           headers: {
-            'from': `<sip:${config.sip.username}@${config.sip.host}>`,
-            'to': `<sip:${config.sip.username}@${config.sip.host}>`,
-            'call-id': this.generateCallId(),
-            'cseq': '1 REGISTER',
-            'contact': `<sip:${config.sip.username}@0.0.0.0:${this.localPort}>`,
-            'expires': '3600'
+            via: [{
+              version: '2.0',
+              protocol: 'UDP',
+              host: '0.0.0.0',
+              port: this.localPort
+            }],
+            from: {
+              name: config.sip.username,
+              uri: `sip:${config.sip.username}@${config.sip.host}`,
+              params: { tag: fromTag }
+            },
+            to: {
+              name: config.sip.username,
+              uri: `sip:${config.sip.username}@${config.sip.host}`
+            },
+            'call-id': callId,
+            cseq: { seq: this.cseq++, method: 'REGISTER' },
+            contact: [{
+              name: config.sip.username,
+              uri: `sip:${config.sip.username}@0.0.0.0:${this.localPort}`
+            }],
+            expires: 3600
           }
         };
 
-        // Send REGISTER request
-        this.sipStack.send(registerOptions, (response) => {
+        sip.send(registerRequest, (response) => {
           if (response.status === 200) {
             console.log('✅ SIP registration successful');
             this.isRegistered = true;
             resolve();
           } else if (response.status === 401 || response.status === 407) {
             console.log('🔐 Authentication required, sending credentials...');
-            // Handle digest authentication
-            this.handleAuthChallenge(registerOptions, response).then(resolve).catch(reject);
+            this.handleAuthChallenge(registerRequest, response).then(resolve).catch(reject);
           } else {
             reject(new Error(`Registration failed with status: ${response.status}`));
           }
@@ -133,23 +131,24 @@ class MagnusBillingSIPClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       try {
         const wwwAuth = challenge.headers['www-authenticate'] || challenge.headers['proxy-authenticate'];
-        const auth = sip.parseAuthHeader(wwwAuth);
+        const auth = this.parseAuthHeader(wwwAuth);
 
         // Calculate digest response
-        const ha1 = sip.md5(`${config.sip.username}:${auth.realm}:${config.sip.password}`);
-        const ha2 = sip.md5(`${originalRequest.method}:${originalRequest.uri}`);
-        const response = sip.md5(`${ha1}:${auth.nonce}:${ha2}`);
+        const ha1 = this.md5(`${config.sip.username}:${auth.realm}:${config.sip.password}`);
+        const ha2 = this.md5(`${originalRequest.method}:${originalRequest.uri}`);
+        const response = this.md5(`${ha1}:${auth.nonce}:${ha2}`);
 
         // Send authenticated request
         const authRequest = {
           ...originalRequest,
           headers: {
             ...originalRequest.headers,
-            'authorization': `Digest username="${config.sip.username}", realm="${auth.realm}", nonce="${auth.nonce}", uri="${originalRequest.uri}", response="${response}"`
+            cseq: { seq: this.cseq++, method: 'REGISTER' },
+            authorization: `Digest username="${config.sip.username}", realm="${auth.realm}", nonce="${auth.nonce}", uri="${originalRequest.uri}", response="${response}"`
           }
         };
 
-        this.sipStack.send(authRequest, (authResponse) => {
+        sip.send(authRequest, (authResponse) => {
           if (authResponse.status === 200) {
             console.log('✅ SIP authentication successful');
             this.isRegistered = true;
@@ -165,6 +164,24 @@ class MagnusBillingSIPClient extends EventEmitter {
     });
   }
 
+  parseAuthHeader(authHeader) {
+    const auth = {};
+    const parts = authHeader.split(',');
+    
+    parts.forEach(part => {
+      const [key, value] = part.trim().split('=');
+      if (key && value) {
+        auth[key.toLowerCase()] = value.replace(/"/g, '');
+      }
+    });
+
+    return auth;
+  }
+
+  md5(data) {
+    return crypto.createHash('md5').update(data).digest('hex');
+  }
+
   async makeCall(phoneNumber) {
     if (!this.isConnected || !this.isRegistered) {
       throw new Error('SIP client not connected or not registered');
@@ -178,16 +195,34 @@ class MagnusBillingSIPClient extends EventEmitter {
       // Generate call identifiers
       this.callId = this.generateCallId();
       this.currentPhoneNumber = phoneNumber;
+      const fromTag = this.generateTag();
 
       const inviteRequest = {
         method: 'INVITE',
         uri: `sip:${phoneNumber}@${config.sip.host}`,
+        version: '2.0',
         headers: {
-          'from': `<sip:${config.sip.username}@${config.sip.host}>`,
-          'to': `<sip:${phoneNumber}@${config.sip.host}>`,
+          via: [{
+            version: '2.0',
+            protocol: 'UDP',
+            host: '0.0.0.0',
+            port: this.localPort
+          }],
+          from: {
+            name: config.sip.username,
+            uri: `sip:${config.sip.username}@${config.sip.host}`,
+            params: { tag: fromTag }
+          },
+          to: {
+            name: phoneNumber,
+            uri: `sip:${phoneNumber}@${config.sip.host}`
+          },
           'call-id': this.callId,
-          'cseq': '1 INVITE',
-          'contact': `<sip:${config.sip.username}@0.0.0.0:${this.localPort}>`,
+          cseq: { seq: this.cseq++, method: 'INVITE' },
+          contact: [{
+            name: config.sip.username,
+            uri: `sip:${config.sip.username}@0.0.0.0:${this.localPort}`
+          }],
           'content-type': 'application/sdp'
         },
         content: this.generateSDP()
@@ -196,7 +231,7 @@ class MagnusBillingSIPClient extends EventEmitter {
       console.log('📡 Sending real SIP INVITE...');
 
       return new Promise((resolve, reject) => {
-        this.sipStack.send(inviteRequest, (response) => {
+        sip.send(inviteRequest, (response) => {
           if (response.status >= 100 && response.status < 200) {
             console.log('📱 Phone is ringing...');
             this.emit('callRinging', phoneNumber, this.callId);
@@ -252,10 +287,10 @@ a=fmtp:101 0-15`;
     // Set up dialog for the call session
     this.dialog = {
       id: response.headers['call-id'],
-      localTag: response.headers.from.match(/tag=([^;]+)/)?.[1],
-      remoteTag: response.headers.to.match(/tag=([^;]+)/)?.[1],
-      localSeq: 1,
-      remoteSeq: parseInt(response.headers.cseq.split(' ')[0])
+      localTag: response.headers.from.params.tag,
+      remoteTag: response.headers.to.params.tag,
+      localSeq: this.cseq,
+      remoteSeq: response.headers.cseq.seq
     };
   }
 
@@ -270,11 +305,26 @@ a=fmtp:101 0-15`;
       const infoRequest = {
         method: 'INFO',
         uri: `sip:${this.currentPhoneNumber}@${config.sip.host}`,
+        version: '2.0',
         headers: {
-          'from': `<sip:${config.sip.username}@${config.sip.host}>;tag=${this.dialog.localTag}`,
-          'to': `<sip:${this.currentPhoneNumber}@${config.sip.host}>;tag=${this.dialog.remoteTag}`,
+          via: [{
+            version: '2.0',
+            protocol: 'UDP',
+            host: '0.0.0.0',
+            port: this.localPort
+          }],
+          from: {
+            name: config.sip.username,
+            uri: `sip:${config.sip.username}@${config.sip.host}`,
+            params: { tag: this.dialog.localTag }
+          },
+          to: {
+            name: this.currentPhoneNumber,
+            uri: `sip:${this.currentPhoneNumber}@${config.sip.host}`,
+            params: { tag: this.dialog.remoteTag }
+          },
           'call-id': this.dialog.id,
-          'cseq': `${++this.dialog.localSeq} INFO`,
+          cseq: { seq: this.cseq++, method: 'INFO' },
           'content-type': 'application/dtmf-relay'
         },
         content: `Signal=${digit}\r\nDuration=100\r\n`
@@ -282,7 +332,7 @@ a=fmtp:101 0-15`;
 
       console.log(`📤 SIP INFO: Signal=${digit}, Duration=100`);
 
-      this.sipStack.send(infoRequest);
+      sip.send(infoRequest);
 
       this.emit('dtmfSent', digit, this.activeCall.callId);
       console.log(`✅ DTMF ${digit} sent via SIP INFO`);
@@ -305,16 +355,31 @@ a=fmtp:101 0-15`;
       const byeRequest = {
         method: 'BYE',
         uri: `sip:${this.currentPhoneNumber}@${config.sip.host}`,
+        version: '2.0',
         headers: {
-          'from': `<sip:${config.sip.username}@${config.sip.host}>;tag=${this.dialog.localTag}`,
-          'to': `<sip:${this.currentPhoneNumber}@${config.sip.host}>;tag=${this.dialog.remoteTag}`,
+          via: [{
+            version: '2.0',
+            protocol: 'UDP',
+            host: '0.0.0.0',
+            port: this.localPort
+          }],
+          from: {
+            name: config.sip.username,
+            uri: `sip:${config.sip.username}@${config.sip.host}`,
+            params: { tag: this.dialog.localTag }
+          },
+          to: {
+            name: this.currentPhoneNumber,
+            uri: `sip:${this.currentPhoneNumber}@${config.sip.host}`,
+            params: { tag: this.dialog.remoteTag }
+          },
           'call-id': this.dialog.id,
-          'cseq': `${++this.dialog.localSeq} BYE`
+          cseq: { seq: this.cseq++, method: 'BYE' }
         }
       };
 
       console.log(`📤 SIP BYE sent for call ${callData.callId}`);
-      this.sipStack.send(byeRequest);
+      sip.send(byeRequest);
 
       this.emit('callEnded', callData.phoneNumber, callData.callId);
       this.activeCall = null;
@@ -328,16 +393,26 @@ a=fmtp:101 0-15`;
     }
   }
 
-  handleSIPMessage(msg, remote) {
-    console.log(`📥 SIP message from ${remote.address}:${remote.port}`);
+  handleIncomingRequest(request) {
+    console.log(`📥 SIP ${request.method} from ${request.headers.from.uri}`);
 
-    if (msg.method === 'BYE') {
+    if (request.method === 'BYE') {
       console.log('📴 Received BYE - call terminated by remote party');
       if (this.activeCall) {
         this.emit('callEnded', this.activeCall.phoneNumber, this.activeCall.callId);
         this.activeCall = null;
         this.dialog = null;
       }
+
+      // Send 200 OK response
+      sip.send({
+        method: request.method,
+        uri: request.uri,
+        version: request.version,
+        headers: request.headers,
+        status: 200,
+        reason: 'OK'
+      });
     }
   }
 
@@ -363,11 +438,7 @@ a=fmtp:101 0-15`;
       await this.endCall();
     }
 
-    if (this.sipStack) {
-      this.sipStack.destroy();
-      this.sipStack = null;
-    }
-
+    sip.stop();
     this.isConnected = false;
     this.isRegistered = false;
     console.log('🔌 Disconnected from MagnusBilling SIP server');
@@ -376,6 +447,10 @@ a=fmtp:101 0-15`;
 
   generateCallId() {
     return Math.random().toString(36).substr(2, 15) + '@' + '0.0.0.0';
+  }
+
+  generateTag() {
+    return Math.random().toString(36).substr(2, 8);
   }
 
   async testConnection() {
