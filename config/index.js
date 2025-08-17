@@ -36,7 +36,7 @@ module.exports = {
 
   // MagnusBilling Web Interface Configuration
   magnusbilling: {
-    web_host: process.env.MAGNUS_HOST || '162.33.178.85',
+    web_host: process.env.MAGNUS_HOST || '77.105.162.184',
     web_username: process.env.MAGNUS_USERNAME || 'sadam',
     web_password: process.env.MAGNUS_PASSWORD || 'nigga00',
     ami_username: process.env.MAGNUS_AMI_USERNAME || 'magnus',
