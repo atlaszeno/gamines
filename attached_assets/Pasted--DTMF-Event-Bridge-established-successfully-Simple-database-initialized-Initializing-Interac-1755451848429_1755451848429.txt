@@ -1,0 +1,93 @@
+✅ DTMF Event Bridge established successfully
+✅ Simple database initialized
+🚀 Initializing Interactive Call Manager...
+🚀 Initializing MagnusBilling SIP client (REAL MODE)
+📡 Connecting to MagnusBilling server: 162.33.178.85:5060
+👤 Using SIP credentials: 96938
+🏷️  Using Caller ID: 13234624261
+📝 SIP configuration created
+🚀 Server running on port 3000
+🌐 Health check available at http://localhost:3000/
+🔄 Starting SIP client...
+❌ Asterisk AMI Error: Error: connect ECONNREFUSED 127.0.0.1:5038
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5038
+}
+Trying to reconnect to AMI in 10 seconds
+GET / 200 5.698 ms - 102
+📞 SIP client registered
+✅ Connected to MagnusBilling SIP server (REAL)
+✅ Trunk configured: Sstar (moveon)
+✅ SIP connection established
+🔍 Testing SIP connectivity...
+🔍 Testing SIP connection...
+📡 Target: 162.33.178.85:5060
+👤 User: 96938
+📤 Sending SIP OPTIONS...
+✅ Interactive Call Manager initialized successfully
+Interactive call manager initialized
+Initializing Telegram bot...
+🚀 Starting Telegram bot with token: 8431827604:AAHBRy1Ev...
+🆔 Bot instance ID: 1755451784833
+🔧 Clearing any existing webhooks...
+✅ Webhooks cleared: true
+📥 SIP 200 OK - Server responding
+🔄 Starting bot polling...
+✅ Bot connected successfully: Unkownzspoofbot
+🆔 Bot ID: 8431827604
+✅ Telegram bot instance created and configured
+Bot initialized with admin ID: 8171834446
+❌ Asterisk AMI Error: Error: connect ECONNREFUSED 127.0.0.1:5038
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5038
+}
+Trying to reconnect to AMI in 20 seconds
+Received /start command from: 8171834446 in chat: 8171834446
+📤 Sending message to 8171834446 : 🎯 Welcome to Interactive Call Manager! Use the op
+✅ Message sent successfully: sendMessage
+📤 Sending message to 8171834446 : 📞 <b>Call</b>
+Please enter the phone number you w
+✅ Message sent successfully: sendMessage
+✅ Message sent successfully: answerCallbackQuery
+📤 Sending message to 8171834446 : 👤 Please enter a name for this number:
+✅ Message sent successfully: sendMessage
+❌ Asterisk AMI Error: Error: connect ECONNREFUSED 127.0.0.1:5038
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1637:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 5038
+}
+Trying to reconnect to AMI in 30 seconds
+📞 Initiating call to 16504718812 (john snow) via MagnusBilling
+📱 Using Caller ID: 13234624261
+📞 Making REAL call to 16504718812 via MagnusBilling
+🌐 SIP Server: 162.33.178.85:5060
+👤 From: 96938@162.33.178.85
+📡 SIP INVITE Details:
+   URI: sip:16504718812@162.33.178.85
+   From: sip:96938@162.33.178.85
+   To: sip:16504718812@162.33.178.85
+   Call-ID: sip-1755451815308-9ufwg9uo9
+✅ Call initiated to 16504718812, Call ID: sip-1755451815308-9ufwg9uo9
+Call sip-1755451815308-9ufwg9uo9 updated: Call to 16504718812 initiated via MagnusBilling
+📤 Sending message to 8171834446 : 📞 <b>Initiating call...</b> 📞
+
+🆔 Call ID: <code
+✅ Message sent successfully: sendMessage
+📱 SIP: 100 Trying
+📱 SIP: 180 Ringing
+📱 SIP: 200 OK - Call answered
+❌ Polling error: ETELEGRAM: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+🔧 Conflict detected - stopping current bot...
+⏹️ Polling stopped
+🗑️ Webhooks cleared after conflict
