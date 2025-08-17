@@ -156,17 +156,15 @@ async function start_bot_instance() {
       }
       
       if (error.code === 'ETELEGRAM' && error.response && error.response.statusCode === 409) {
-        console.log('🔧 Conflict detected - stopping current bot...');
+        console.log('🔧 Conflict detected - another bot instance is running');
+        console.log('🛑 Terminating this instance to avoid conflicts');
         
         try {
           // Stop polling immediately
           bot.stopPolling();
           console.log('⏹️ Polling stopped');
           
-          // Wait longer before attempting restart
-          await new Promise(resolve => setTimeout(resolve, 10000));
-          
-          // Clear webhooks again
+          // Clear webhooks
           try {
             await bot.setWebHook('', { drop_pending_updates: true });
             console.log('🗑️ Webhooks cleared after conflict');
@@ -174,23 +172,13 @@ async function start_bot_instance() {
             console.log('⚠️ Could not clear webhook after conflict:', webhookError.message);
           }
           
-          // Wait longer before restarting to ensure other instances timeout
-          await new Promise(resolve => setTimeout(resolve, 15000));
+          // Reset bot instance completely
+          bot = null;
+          isStarting = false;
+          console.log('🔄 Bot instance reset due to conflict');
           
-          // Restart polling
-          console.log('🔄 Restarting bot polling after conflict...');
-          bot.startPolling({
-            interval: 1000,
-            params: {
-              timeout: 10,
-              allowed_updates: ['message', 'callback_query']
-            }
-          });
-          
-          console.log('✅ Bot polling restarted successfully');
-        } catch (restartError) {
-          console.error('❌ Failed to restart bot after conflict:', restartError.message);
-          // Reset bot instance on failure
+        } catch (cleanupError) {
+          console.error('❌ Failed to cleanup bot after conflict:', cleanupError.message);
           bot = null;
           isStarting = false;
         }

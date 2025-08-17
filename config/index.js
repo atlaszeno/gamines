@@ -51,5 +51,5 @@ module.exports = {
   agents: ['default', 'support', 'sales'],
   
   // Development mode - skip local Asterisk AMI
-  development_mode: false // Force real mode for SIP testing
+  development_mode: true // Skip local Asterisk AMI connection
 };

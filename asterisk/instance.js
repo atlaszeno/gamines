@@ -140,7 +140,10 @@ function isConnected() {
 
 // Initialize AMI when this module is loaded
 if (!config.development_mode) {
-  initializeAMI().catch(console.error);
+  initializeAMI().catch((error) => {
+    console.error('❌ Failed to initialize AMI:', error.message);
+    console.log('ℹ️ Continuing without local Asterisk AMI...');
+  });
 } else {
   console.log('ℹ️ Development mode - skipping local Asterisk AMI connection');
 }
